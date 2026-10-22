@@ -110,6 +110,18 @@
 
 .paranoid-card-text {
 	min-width: 0;
+	flex-grow: 1;
+}
+
+.paranoid-details-icon {
+	flex: none;
+	align-self: center;
+	padding: 2px;
+}
+
+.paranoid-details-icon.is-missing {
+	opacity: 0.35;
+	cursor: default;
 }
 
 .paranoid-symbol-input {
@@ -150,6 +162,33 @@
 	justify-content: center;
 	gap: 6px;
 	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	text-align: center;
+}
+
+.paranoid-settings-tabs {
+	display: flex;
+	gap: 4px;
+	margin-bottom: 16px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.paranoid-settings-tab {
+	background: none;
+	box-shadow: none;
+	border-radius: var(--radius-s) var(--radius-s) 0 0;
+	border-bottom: 2px solid transparent;
+	color: var(--text-muted);
+}
+
+.paranoid-settings-tab.is-active {
+	color: var(--text-normal);
+	border-bottom-color: var(--interactive-accent);
+}
+
+.paranoid-settings-version {
+	margin-top: 24px;
+	color: var(--text-faint);
 	font-size: var(--font-ui-smaller);
 	text-align: center;
 }

@@ -1,4 +1,4 @@
-import { ItemView, Notice, setIcon, TAbstractFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, setIcon, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
 import type ParanoidTasksPlugin from "./main";
 import type { Priority } from "./settings";
 import {
@@ -11,9 +11,18 @@ import {
 	REMOVE_SECTION,
 	sameTitle,
 	TaskList,
+	toFileName,
 } from "./tasks";
-import { ensureTaskFile, readTasks, TASK_FILE_PATH, updateTasks } from "./taskStore";
-import { TaskModal } from "./TaskModal";
+import { ensureTaskFile, readTasks, taskFilePath, updateTasks } from "./taskStore";
+import { TaskModal, TaskModalResult } from "./TaskModal";
+import {
+	checkDetailsName,
+	createDetails,
+	openDetails,
+	renameDetailsFile,
+	resolveDetails,
+	trashDetails,
+} from "./details";
 
 export const VIEW_TYPE_BOARD = "paranoid-tasks-board";
 
@@ -47,13 +56,18 @@ export class BoardView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
-		const onChange = (file: TAbstractFile, oldPath?: string) => {
-			if (file.path === TASK_FILE_PATH || oldPath === TASK_FILE_PATH) void this.refresh();
+		// Main.md content changes redraw the board; any note appearing, disappearing or
+		// being renamed may change whether a details link resolves.
+		const onMainChange = (file: TAbstractFile) => {
+			if (file.path === taskFilePath()) void this.refresh();
 		};
-		this.registerEvent(this.app.vault.on("modify", onChange));
-		this.registerEvent(this.app.vault.on("create", onChange));
-		this.registerEvent(this.app.vault.on("delete", onChange));
-		this.registerEvent(this.app.vault.on("rename", onChange));
+		const onNoteChange = (file: TAbstractFile) => {
+			if (file instanceof TFile && file.extension === "md") void this.refresh();
+		};
+		this.registerEvent(this.app.vault.on("modify", onMainChange));
+		this.registerEvent(this.app.vault.on("create", onNoteChange));
+		this.registerEvent(this.app.vault.on("delete", onNoteChange));
+		this.registerEvent(this.app.vault.on("rename", onNoteChange));
 
 		try {
 			await ensureTaskFile(this.app, this.plugin.settings.columns);
@@ -243,6 +257,20 @@ export class BoardView extends ItemView {
 		}
 		card.createSpan({ cls: "paranoid-card-text", text: task.text });
 
+		if (task.details && this.plugin.settings.showDetailsIcon) {
+			const details = task.details;
+			const missing = !resolveDetails(this.app, details);
+			const icon = card.createDiv({
+				cls: "clickable-icon paranoid-details-icon" + (missing ? " is-missing" : ""),
+				attr: { "aria-label": missing ? `Details note not found: ${details}` : `Open ${details}` },
+			});
+			setIcon(icon, "file-text");
+			icon.addEventListener("click", (e) => {
+				e.stopPropagation();
+				if (!missing) void openDetails(this.app, details);
+			});
+		}
+
 		card.addEventListener("click", () => {
 			this.openTaskModal("Edit task", text, (l, line) => editTask(l, section, index, text, line));
 		});
@@ -272,17 +300,62 @@ export class BoardView extends ItemView {
 	private openTaskModal(title: string, raw: string, apply: (list: TaskList, line: string) => TaskList): void {
 		const task = parseTask(raw);
 		const priorities = this.plugin.settings.priorities;
-		const defaultName = priorities[0].name;
 		new TaskModal(this.app, {
 			title,
 			initialText: task.text,
 			priorities: priorities.map((p) => p.name),
-			initialPriority: this.findPriority(task.priority)?.name ?? task.priority ?? defaultName,
-			onSubmit: (text, priority) => {
-				const line = formatTask(sameTitle(priority, defaultName) ? null : priority, text);
-				void this.mutate((l) => apply(l, line));
-			},
+			initialPriority: this.findPriority(task.priority)?.name ?? task.priority ?? priorities[0].name,
+			initialDetails: task.details,
+			detailsExists: task.details !== null && resolveDetails(this.app, task.details) !== null,
+			detailsFromText: this.plugin.settings.detailsFromText,
+			onSubmit: (result, open) => this.saveTask(task.details, result, open, apply),
 		}).open();
+	}
+
+	/**
+	 * Writes the task line and creates/renames/trashes the details note.
+	 * Order matters: Main.md is updated before a rename so the plugin's rename
+	 * handler finds nothing left to fix; a new note is created before it is linked.
+	 */
+	private async saveTask(
+		oldDetails: string | null,
+		result: TaskModalResult,
+		open: boolean,
+		apply: (list: TaskList, line: string) => TaskList,
+	): Promise<void> {
+		const { columns, priorities, detailsFromText } = this.plugin.settings;
+		const priority = sameTitle(result.priority, priorities[0].name) ? null : result.priority;
+		const write = (details: string | null) =>
+			updateTasks(this.app, columns, (l) => apply(l, formatTask({ priority, details, text: result.text })));
+		const name = toFileName(detailsFromText ? result.text : result.details.name);
+		const oldFile = oldDetails ? resolveDetails(this.app, oldDetails) : null;
+		let details: string | null = null;
+
+		switch (result.details.action) {
+			case "none":
+				await write(null);
+				break;
+			case "add":
+				await createDetails(this.app, name, columns);
+				await write(name);
+				details = name;
+				break;
+			case "keep": {
+				// A missing note keeps its link as is; an existing one is renamed if the name changed.
+				const rename = oldFile !== null && oldFile.basename !== name;
+				if (rename) checkDetailsName(this.app, name, oldFile);
+				details = rename ? name : oldDetails;
+				await write(details);
+				if (rename) await renameDetailsFile(this.app, oldFile, name);
+				break;
+			}
+			case "remove":
+				await write(null);
+				if (oldFile) await trashDetails(this.app, oldFile);
+				break;
+		}
+
+		if (open && details) await openDetails(this.app, details);
 	}
 
 	private renderRemoveZone(root: HTMLElement): void {

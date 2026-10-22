@@ -1,18 +1,21 @@
-import { Plugin } from "obsidian";
+import { normalizePath, Notice, Plugin, TAbstractFile, TFile } from "obsidian";
 import { BoardView, VIEW_TYPE_BOARD } from "./BoardView";
 import { DEFAULT_SETTINGS, ParanoidTasksSettings, ParanoidTasksSettingTab, Priority } from "./settings";
 import {
 	clearPriority,
 	DEFAULT_COLUMN,
 	mergeSection,
+	renameDetails,
 	renamePriority as renamePriorityTags,
 	renameSection,
 	sanitize,
+	serialize,
 	TaskList,
+	toFileName,
 	validateColumnName,
 	validatePriorityName,
 } from "./tasks";
-import { updateTasks } from "./taskStore";
+import { ensureTaskFile, readTasks, setTaskLocation, taskFilePath, taskFolder, updateTasks } from "./taskStore";
 
 export default class ParanoidTasksPlugin extends Plugin {
 	settings: ParanoidTasksSettings = { ...DEFAULT_SETTINGS };
@@ -29,6 +32,57 @@ export default class ParanoidTasksPlugin extends Plugin {
 			name: "Open task board",
 			callback: () => void this.activateView(),
 		});
+
+		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => void this.onFileRenamed(file, oldPath)));
+	}
+
+	/**
+	 * Points the board to another task file (existing files are not moved).
+	 * The file is created if missing; on failure the previous location is kept.
+	 */
+	async changeTaskLocation(patch: { taskFolder?: string; taskFile?: string }): Promise<void> {
+		const folder = patch.taskFolder !== undefined ? toFolderPath(patch.taskFolder) : this.settings.taskFolder;
+		const file = patch.taskFile !== undefined ? toTaskFileName(patch.taskFile) : this.settings.taskFile;
+		if (!file) throw new Error("Task file name is empty");
+		if (folder === this.settings.taskFolder && file === this.settings.taskFile) return;
+
+		setTaskLocation(folder, file);
+		try {
+			await ensureTaskFile(this.app, this.settings.columns);
+		} catch (e) {
+			setTaskLocation(this.settings.taskFolder, this.settings.taskFile);
+			throw e;
+		}
+		await this.updateSettings({ taskFolder: folder, taskFile: file });
+	}
+
+	async updateSettings(patch: Partial<ParanoidTasksSettings>): Promise<void> {
+		this.settings = { ...this.settings, ...patch };
+		await this.saveData(this.settings);
+		this.refreshBoards();
+	}
+
+	/** Keeps [Details: [[...]]] links in Main.md pointing to a details note after it is renamed or moved. */
+	private async onFileRenamed(file: TAbstractFile, oldPath: string): Promise<void> {
+		if (!(file instanceof TFile) || file.extension !== "md" || !/\.md$/i.test(oldPath)) return;
+		if (file.path === taskFilePath() || oldPath === taskFilePath()) return;
+		if (!(this.app.vault.getAbstractFileByPath(taskFilePath()) instanceof TFile)) return;
+
+		// A link may be written as a bare name, a full path or a path relative to Tasks/.
+		const oldLink = oldPath.replace(/\.md$/i, "");
+		const oldNames = [oldLink.split("/").pop() ?? oldLink, oldLink];
+		const folder = taskFolder();
+		if (folder && oldLink.startsWith(`${folder}/`)) oldNames.push(oldLink.slice(folder.length + 1));
+		const rename = (l: TaskList) => renameDetails(l, oldNames, file.basename, this.settings.detailsFromText);
+
+		try {
+			// Skip the write when no task links to the renamed note.
+			const list = await readTasks(this.app);
+			if (serialize(rename(list)) === serialize(list)) return;
+			await updateTasks(this.app, this.settings.columns, rename);
+		} catch (e) {
+			new Notice(`Paranoid Tasks: ${(e as Error).message}`);
+		}
 	}
 
 	async addColumn(rawName: string): Promise<void> {
@@ -167,11 +221,18 @@ export default class ParanoidTasksPlugin extends Plugin {
 		const collapsed = Array.isArray(data?.collapsed)
 			? data.collapsed.filter((c): c is string => typeof c === "string" && columns.includes(c))
 			: [];
+		const folder = typeof data?.taskFolder === "string" ? toFolderPath(data.taskFolder) : DEFAULT_SETTINGS.taskFolder;
+		const file = (typeof data?.taskFile === "string" && toTaskFileName(data.taskFile)) || DEFAULT_SETTINGS.taskFile;
+		setTaskLocation(folder, file);
 		this.settings = {
+			taskFolder: folder,
+			taskFile: file,
 			columns,
 			collapsed,
-			columnDrag: typeof data?.columnDrag === "boolean" ? data.columnDrag : DEFAULT_SETTINGS.columnDrag,
+			columnDrag: loadBoolean(data?.columnDrag, DEFAULT_SETTINGS.columnDrag),
 			priorities: loadPriorities(data?.priorities),
+			detailsFromText: loadBoolean(data?.detailsFromText, DEFAULT_SETTINGS.detailsFromText),
+			showDetailsIcon: loadBoolean(data?.showDetailsIcon, DEFAULT_SETTINGS.showDetailsIcon),
 		};
 	}
 
@@ -190,6 +251,21 @@ export default class ParanoidTasksPlugin extends Plugin {
 
 function assertValid(error: string | null): void {
 	if (error) throw new Error(error);
+}
+
+/** Normalizes a vault folder path; "" (or "/") means the vault root. */
+function toFolderPath(raw: string): string {
+	const path = normalizePath(raw.trim());
+	return path === "/" ? "" : path;
+}
+
+/** Task file name without ".md" and characters not allowed in note names. */
+function toTaskFileName(raw: string): string {
+	return toFileName(raw.trim().replace(/\.md$/i, ""));
+}
+
+function loadBoolean(value: unknown, fallback: boolean): boolean {
+	return typeof value === "boolean" ? value : fallback;
 }
 
 /** Validates priorities from data.json, falling back to defaults. */

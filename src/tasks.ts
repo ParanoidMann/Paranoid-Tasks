@@ -119,23 +119,58 @@ export function validatePriorityName(name: string, priorities: string[], index: 
 }
 
 const PRIORITY_TAG = /^\[Priority:\s*([^\]]+?)\s*\]\s*/i;
+const DETAILS_TAG = /^\[Details:\s*\[\[([^\]]+?)\]\]\s*\]\s*/i;
 
 export interface ParsedTask {
 	/** Priority from the tag, or null if the line has no tag. */
 	priority: string | null;
+	/** Link target of the details note from `[Details: [[X]]]`, or null. */
+	details: string | null;
 	text: string;
 }
 
-/** Splits a task line into the `[Priority: X]` tag and the text. */
-export function parseTask(raw: string): ParsedTask {
-	const match = PRIORITY_TAG.exec(raw);
-	if (!match) return { priority: null, text: raw };
-	return { priority: match[1], text: raw.slice(match[0].length) };
+/** Link target without alias (`|...`) and heading/block (`#...`) parts. */
+function linkTarget(link: string): string {
+	return link.split("|")[0].split("#")[0].trim();
 }
 
-/** Builds a task line; a null priority means no tag. */
-export function formatTask(priority: string | null, text: string): string {
-	return priority ? `[Priority: ${priority}] ${text}` : text;
+/** Splits a task line into its leading tags (in any order) and the text. */
+export function parseTask(raw: string): ParsedTask {
+	const task: ParsedTask = { priority: null, details: null, text: raw };
+	for (;;) {
+		const priority = task.priority === null ? PRIORITY_TAG.exec(task.text) : null;
+		if (priority) {
+			task.priority = priority[1];
+			task.text = task.text.slice(priority[0].length);
+			continue;
+		}
+		const details = task.details === null ? DETAILS_TAG.exec(task.text) : null;
+		if (details) {
+			task.details = linkTarget(details[1]);
+			task.text = task.text.slice(details[0].length);
+			continue;
+		}
+		return task;
+	}
+}
+
+/** Builds a task line: priority tag, details tag, text. Null parts are omitted. */
+export function formatTask(task: ParsedTask): string {
+	const parts: string[] = [];
+	if (task.priority) parts.push(`[Priority: ${task.priority}]`);
+	if (task.details) parts.push(`[Details: [[${task.details}]]]`);
+	parts.push(task.text);
+	return parts.join(" ");
+}
+
+/** Makes a note name from arbitrary text; returns "" if nothing usable is left. */
+export function toFileName(text: string): string {
+	return text
+		.replace(/[\\/:*?"<>|#^[\]]/g, " ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.slice(0, 100)
+		.replace(/[\s.]+$/, "");
 }
 
 function mapItems(list: TaskList, fn: (raw: string) => string): TaskList {
@@ -149,7 +184,7 @@ function mapItems(list: TaskList, fn: (raw: string) => string): TaskList {
 export function renamePriority(list: TaskList, oldName: string, newName: string): TaskList {
 	return mapItems(list, (raw) => {
 		const task = parseTask(raw);
-		return task.priority && sameTitle(task.priority, oldName) ? formatTask(newName, task.text) : raw;
+		return task.priority && sameTitle(task.priority, oldName) ? formatTask({ ...task, priority: newName }) : raw;
 	});
 }
 
@@ -157,7 +192,23 @@ export function renamePriority(list: TaskList, oldName: string, newName: string)
 export function clearPriority(list: TaskList, name: string): TaskList {
 	return mapItems(list, (raw) => {
 		const task = parseTask(raw);
-		return task.priority && sameTitle(task.priority, name) ? task.text : raw;
+		return task.priority && sameTitle(task.priority, name) ? formatTask({ ...task, priority: null }) : raw;
+	});
+}
+
+/**
+ * Points details links that match any of `oldNames` (case-insensitive,
+ * ".md" optional) to `newName`. With `syncText`, the task text becomes `newName` too.
+ */
+export function renameDetails(list: TaskList, oldNames: string[], newName: string, syncText: boolean): TaskList {
+	const matches = (target: string) => {
+		const name = target.replace(/\.md$/i, "");
+		return oldNames.some((old) => sameTitle(old, name));
+	};
+	return mapItems(list, (raw) => {
+		const task = parseTask(raw);
+		if (!task.details || !matches(task.details)) return raw;
+		return formatTask({ ...task, details: newName, text: syncText ? newName : task.text });
 	});
 }
 

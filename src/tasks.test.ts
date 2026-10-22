@@ -11,6 +11,7 @@ import {
 	normalize,
 	parse,
 	parseTask,
+	renameDetails,
 	renamePriority,
 	renameSection,
 	sanitize,
@@ -18,6 +19,7 @@ import {
 	TaskList,
 	validateColumnName,
 	validatePriorityName,
+	toFileName,
 } from "./tasks";
 
 const COLUMNS = ["Open", "Done"];
@@ -150,12 +152,16 @@ describe("section operations", () => {
 
 describe("priorities", () => {
 	it("parses and formats the priority tag", () => {
-		expect(parseTask("plain task")).toEqual({ priority: null, text: "plain task" });
-		expect(parseTask("[Priority: High] urgent")).toEqual({ priority: "High", text: "urgent" });
-		expect(parseTask("[priority:  Very High ]x")).toEqual({ priority: "Very High", text: "x" });
-		expect(parseTask("see [Priority: High] later")).toEqual({ priority: null, text: "see [Priority: High] later" });
-		expect(formatTask(null, "a")).toBe("a");
-		expect(formatTask("High", "a")).toBe("[Priority: High] a");
+		expect(parseTask("plain task")).toEqual({ priority: null, details: null, text: "plain task" });
+		expect(parseTask("[Priority: High] urgent")).toEqual({ priority: "High", details: null, text: "urgent" });
+		expect(parseTask("[priority:  Very High ]x")).toEqual({ priority: "Very High", details: null, text: "x" });
+		expect(parseTask("see [Priority: High] later")).toEqual({
+			priority: null,
+			details: null,
+			text: "see [Priority: High] later",
+		});
+		expect(formatTask({ priority: null, details: null, text: "a" })).toBe("a");
+		expect(formatTask({ priority: "High", details: null, text: "a" })).toBe("[Priority: High] a");
 	});
 
 	it("survives the Main.md round-trip", () => {
@@ -187,5 +193,55 @@ describe("priorities", () => {
 		expect(validatePriorityName("a]b", names, -1)).not.toBeNull();
 		expect(validatePriorityName("Low", names, -1)).toBeNull();
 		expect(validatePriorityName("Remove", names, -1)).toBeNull();
+	});
+});
+
+describe("details", () => {
+	it("parses the details tag after or before the priority", () => {
+		const expected = { priority: "High", details: "Note", text: "do it" };
+		expect(parseTask("[Priority: High] [Details: [[Note]]] do it")).toEqual(expected);
+		expect(parseTask("[Details:[[Note]]][Priority: High] do it")).toEqual(expected);
+		expect(parseTask("[Details: [[Note]]] do it")).toEqual({ priority: null, details: "Note", text: "do it" });
+	});
+
+	it("takes the link target without alias and heading", () => {
+		expect(parseTask("[Details: [[Tasks/Note#Part|Alias]]] x").details).toBe("Tasks/Note");
+	});
+
+	it("formats the priority tag first and round-trips", () => {
+		const line = "[Priority: High] [Details: [[Note]]] do it";
+		expect(formatTask({ priority: "High", details: "Note", text: "do it" })).toBe(line);
+		expect(formatTask(parseTask(line))).toBe(line);
+		expect(formatTask({ priority: null, details: "Note", text: "x" })).toBe("[Details: [[Note]]] x");
+	});
+
+	it("keeps details when changing priorities", () => {
+		const list = parse("## Open\n- [Priority: High] [Details: [[N]]] a\n");
+		expect(getItems(renamePriority(list, "High", "Urgent"), "Open")).toEqual(["[Priority: Urgent] [Details: [[N]]] a"]);
+		expect(getItems(clearPriority(list, "High"), "Open")).toEqual(["[Details: [[N]]] a"]);
+	});
+
+	const list = parse(
+		"## Open\n- [Details: [[Old]]] text\n- [Details: [[tasks/old.md]]] other\n- [Details: [[Another]]] keep\n- plain\n",
+	);
+
+	it("renames matching details links", () => {
+		expect(getItems(renameDetails(list, ["Old", "Tasks/Old"], "New", false), "Open")).toEqual([
+			"[Details: [[New]]] text",
+			"[Details: [[New]]] other",
+			"[Details: [[Another]]] keep",
+			"plain",
+		]);
+	});
+
+	it("syncs the task text when asked", () => {
+		expect(getItems(renameDetails(list, ["old"], "New", true), "Open")[0]).toBe("[Details: [[New]]] New");
+	});
+
+	it("makes file names from text", () => {
+		expect(toFileName('  a/b: c*d?"e"<f>|g#h^i[j]  ')).toBe("a b c d e f g h i j");
+		expect(toFileName("ends with dots...")).toBe("ends with dots");
+		expect(toFileName("x".repeat(150))).toHaveLength(100);
+		expect(toFileName("/// ")).toBe("");
 	});
 });
