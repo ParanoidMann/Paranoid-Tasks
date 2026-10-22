@@ -2,6 +2,7 @@
 // and the fallback. Must not import "obsidian" so it can be used from tests.
 import en from "./locales/en.json";
 import ru from "./locales/ru.json";
+import de from "./locales/de.json";
 
 export type TranslationKey = keyof typeof en;
 type Translations = Record<TranslationKey, string>;
@@ -10,9 +11,10 @@ type Translations = Record<TranslationKey, string>;
 const LOCALES: Record<string, Translations> = {
 	en,
 	ru: ru satisfies Translations,
+	de: de satisfies Translations,
 };
 
-export const LANGUAGES = ["en", "ru"] as const;
+export const LANGUAGES = ["en", "ru", "de"] as const;
 export type Language = (typeof LANGUAGES)[number];
 
 let current: Translations = en;

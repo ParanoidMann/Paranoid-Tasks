@@ -101,6 +101,7 @@
 	"settings.languageAuto": "Auto (as in Obsidian)",
 	"language.en": "English",
 	"language.ru": "Русский",
+	"language.de": "Deutsch",
 
 	"settings.board": "Board",
 	"settings.boardName": "Board name",
@@ -155,7 +156,7 @@
 	"settings.deadlinePriorityNone": "Add a priority other than the default one first.",
 
 	"settings.repeat": "Recurring tasks",
-	"settings.repeatDesc": "A recurring task has a checkbox on its card. The check mark is cleared when a new period starts: a new hour, day (00:00 or the chosen time), week (Monday), month or year.",
+	"settings.repeatDesc": "A recurring task has a checkbox on its card. The check mark is cleared when a new period starts: a new hour, day (00:00 or the chosen time), week (Monday or the chosen day), month (the 1st or the chosen day) or year.",
 	"settings.repeatShow": "Show repeat on cards",
 	"settings.repeatShowDesc": "Show how often the task repeats in small text under the task text.",
 
