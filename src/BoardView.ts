@@ -345,7 +345,8 @@ export class BoardView extends ItemView {
 
 		if (priority) {
 			const symbol = card.createSpan({ cls: "paranoid-priority", text: priority.symbol });
-			symbol.style.color = priority.color;
+			// The color is user-defined, so it is passed to CSS as a variable.
+			symbol.setCssProps({ "--paranoid-priority-color": priority.color });
 			symbol.setAttr("aria-label", priority.name);
 		} else {
 			card.createSpan({

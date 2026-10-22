@@ -102,6 +102,7 @@
 
 .paranoid-priority {
 	flex: none;
+	color: var(--paranoid-priority-color, inherit);
 }
 
 .paranoid-priority.is-unknown {

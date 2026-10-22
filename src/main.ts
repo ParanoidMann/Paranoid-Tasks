@@ -107,7 +107,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 		await this.saveData(this.settings);
 		if (patch.language !== undefined) this.applyLanguage();
 		if (patch.language !== undefined || patch.boardName !== undefined || patch.boardIcon !== undefined) {
-			this.updateBoardChrome();
+			await this.updateBoardChrome();
 		}
 		this.refreshBoards();
 	}
@@ -155,14 +155,15 @@ export default class ParanoidTasksPlugin extends Plugin {
 	}
 
 	/** Updates the ribbon icon/tooltip and the headers of open board tabs. */
-	private updateBoardChrome(): void {
+	private async updateBoardChrome(): Promise<void> {
 		if (this.ribbonEl) {
 			setIcon(this.ribbonEl, this.settings.boardIcon);
 			this.ribbonEl.setAttr("aria-label", this.boardTitle());
 		}
+		// The public API has no way to refresh a tab header, so reopen the board in place.
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BOARD)) {
-			// Not in the public API; without it the tab header updates after reopening the board.
-			(leaf as unknown as { updateHeader?: () => void }).updateHeader?.();
+			await leaf.setViewState({ type: "empty" });
+			await leaf.setViewState({ type: VIEW_TYPE_BOARD });
 		}
 	}
 
