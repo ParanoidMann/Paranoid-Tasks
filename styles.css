@@ -1,0 +1,97 @@
+.paranoid-board {
+	display: flex;
+	gap: 16px;
+	align-items: flex-start;
+	overflow-x: auto;
+}
+
+.paranoid-column {
+	flex: 0 0 280px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 8px;
+	border-radius: var(--radius-m);
+	background-color: var(--background-secondary);
+	min-height: 120px;
+}
+
+.paranoid-column-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 4px;
+}
+
+.paranoid-column-title {
+	font-weight: var(--font-semibold);
+}
+
+.paranoid-column-count {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.paranoid-add {
+	margin-left: auto;
+}
+
+.paranoid-cards {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	flex-grow: 1;
+	min-height: 40px;
+}
+
+.paranoid-card {
+	padding: 8px 10px;
+	border-radius: var(--radius-s);
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	cursor: grab;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.paranoid-card:hover {
+	border-color: var(--interactive-accent);
+}
+
+.paranoid-card.is-dragging {
+	opacity: 0.4;
+}
+
+.paranoid-drop-indicator {
+	height: 3px;
+	border-radius: 2px;
+	background-color: var(--interactive-accent);
+}
+
+.paranoid-remove-zone {
+	flex-basis: 160px;
+	border: 2px dashed var(--background-modifier-border);
+	background-color: transparent;
+}
+
+.paranoid-remove-zone.is-drop-target {
+	border-color: var(--text-error);
+	background-color: var(--background-modifier-error);
+}
+
+.paranoid-remove-body {
+	flex-grow: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	text-align: center;
+}
+
+.paranoid-modal-input {
+	width: 100%;
+	resize: vertical;
+}

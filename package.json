@@ -1,0 +1,20 @@
+{
+  "name": "paranoid-tasks",
+  "version": "0.1.0",
+  "description": "Simple Kanban task board for Obsidian",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "esbuild": "^0.28.2",
+    "obsidian": "^1.14.4",
+    "typescript": "~5.9",
+    "vitest": "^3.2.7"
+  }
+}

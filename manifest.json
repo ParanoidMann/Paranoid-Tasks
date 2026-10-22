@@ -1,0 +1,9 @@
+{
+  "id": "paranoid-tasks",
+  "name": "Paranoid Tasks",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Simple Kanban task board backed by a single Markdown file.",
+  "author": "nrodin",
+  "isDesktopOnly": false
+}
