@@ -345,3 +345,41 @@
 	width: 12px;
 	height: 12px;
 }
+
+/* Phones: Obsidian stacks modal setting rows into columns and stretches every control to full
+   width (.is-phone .modal .setting-item...). Keep the task dialog's compact "label — controls"
+   rows instead; these selectors are more specific than Obsidian's. */
+.is-phone .modal.paranoid-task-modal .paranoid-task-fields .setting-item {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+}
+
+.is-phone .modal.paranoid-task-modal .paranoid-task-fields .setting-item-info {
+	flex: 0 0 90px;
+	margin-right: 0;
+}
+
+.is-phone .modal.paranoid-task-modal .paranoid-task-fields .setting-item-control {
+	width: auto;
+	flex: 1 1 0;
+	min-width: 0;
+	justify-content: flex-end;
+}
+
+.is-phone .modal.paranoid-task-modal .paranoid-task-fields .setting-item-control select,
+.is-phone .modal.paranoid-task-modal .paranoid-task-fields .setting-item-control input,
+.is-phone .modal.paranoid-task-modal .paranoid-task-fields .setting-item-control button:not(.clickable-icon) {
+	width: auto;
+	min-width: 0;
+	max-width: 100%;
+}
+
+/* The details note name field takes the free space so the buttons stay on the same line. */
+.is-phone .modal.paranoid-task-modal .paranoid-task-fields .setting-item-control input[type="text"] {
+	flex: 1 1 0;
+}
+
+.is-phone .paranoid-modal-footer button {
+	padding: 10px 14px;
+}
