@@ -1,11 +1,11 @@
 import { App, TFile } from "obsidian";
-import { emptyList, parse, serialize, TaskList } from "./tasks";
+import { emptyList, normalize, parse, serialize, TaskList } from "./tasks";
 
 export const TASK_FOLDER = "Tasks";
 export const TASK_FILE_PATH = `${TASK_FOLDER}/Main.md`;
 
 /** Returns Tasks/Main.md, creating the folder and file if they are missing. */
-export async function ensureTaskFile(app: App): Promise<TFile> {
+export async function ensureTaskFile(app: App, columns: string[]): Promise<TFile> {
 	const existing = app.vault.getAbstractFileByPath(TASK_FILE_PATH);
 	if (existing instanceof TFile) return existing;
 	if (existing) throw new Error(`${TASK_FILE_PATH} exists but is not a file`);
@@ -19,7 +19,7 @@ export async function ensureTaskFile(app: App): Promise<TFile> {
 		}
 	}
 	try {
-		return await app.vault.create(TASK_FILE_PATH, serialize(emptyList()));
+		return await app.vault.create(TASK_FILE_PATH, serialize(normalize(emptyList(), columns)));
 	} catch (e) {
 		const file = app.vault.getAbstractFileByPath(TASK_FILE_PATH);
 		if (file instanceof TFile) return file;
@@ -34,8 +34,12 @@ export async function readTasks(app: App): Promise<TaskList> {
 	return parse(await app.vault.read(file));
 }
 
-/** Atomically applies `fn` to the task list stored in Main.md. */
-export async function updateTasks(app: App, fn: (list: TaskList) => TaskList): Promise<void> {
-	const file = await ensureTaskFile(app);
-	await app.vault.process(file, (data) => serialize(fn(parse(data))));
+/** Atomically applies `fn` to the task list stored in Main.md, laid out for `columns`. */
+export async function updateTasks(
+	app: App,
+	columns: string[],
+	fn: (list: TaskList) => TaskList = (list) => list,
+): Promise<void> {
+	const file = await ensureTaskFile(app, columns);
+	await app.vault.process(file, (data) => serialize(normalize(fn(parse(data)), columns)));
 }

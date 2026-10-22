@@ -1,15 +1,13 @@
 import { ItemView, Notice, setIcon, TAbstractFile, WorkspaceLeaf } from "obsidian";
-import { addTask, editTask, moveTask, Section, SECTION_TITLES, TaskList } from "./tasks";
+import type ParanoidTasksPlugin from "./main";
+import { addTask, editTask, getItems, moveTask, REMOVE_SECTION, TaskList } from "./tasks";
 import { ensureTaskFile, readTasks, TASK_FILE_PATH, updateTasks } from "./taskStore";
 import { TaskModal } from "./TaskModal";
 
 export const VIEW_TYPE_BOARD = "paranoid-tasks-board";
 
-/** Sections shown as columns with cards. "remove" is only a drop zone. */
-const CARD_SECTIONS: Section[] = ["open", "done"];
-
 interface DragState {
-	section: Section;
+	section: string;
 	index: number;
 	text: string;
 }
@@ -19,7 +17,7 @@ export class BoardView extends ItemView {
 	private dropIndicator: HTMLElement | null = null;
 	private renderToken = 0;
 
-	constructor(leaf: WorkspaceLeaf) {
+	constructor(leaf: WorkspaceLeaf, private plugin: ParanoidTasksPlugin) {
 		super(leaf);
 	}
 
@@ -45,7 +43,7 @@ export class BoardView extends ItemView {
 		this.registerEvent(this.app.vault.on("rename", onChange));
 
 		try {
-			await ensureTaskFile(this.app);
+			await ensureTaskFile(this.app, this.plugin.settings.columns);
 		} catch (e) {
 			new Notice(`Paranoid Tasks: ${(e as Error).message}`);
 		}
@@ -56,7 +54,7 @@ export class BoardView extends ItemView {
 		this.contentEl.empty();
 	}
 
-	private async refresh(): Promise<void> {
+	async refresh(): Promise<void> {
 		const token = ++this.renderToken;
 		const list = await readTasks(this.app);
 		// A newer refresh started while we were reading; let it win.
@@ -66,7 +64,7 @@ export class BoardView extends ItemView {
 
 	private async mutate(fn: (list: TaskList) => TaskList): Promise<void> {
 		try {
-			await updateTasks(this.app, fn);
+			await updateTasks(this.app, this.plugin.settings.columns, fn);
 		} catch (e) {
 			new Notice(`Paranoid Tasks: ${(e as Error).message}`);
 		}
@@ -78,12 +76,13 @@ export class BoardView extends ItemView {
 		root.addClass("paranoid-board");
 		this.dropIndicator = null;
 
-		for (const section of CARD_SECTIONS) this.renderColumn(root, section, list.sections[section]);
+		// Columns come from settings; Remove is only a drop zone.
+		for (const column of this.plugin.settings.columns) this.renderColumn(root, column, getItems(list, column));
 		this.renderRemoveZone(root);
 	}
 
-	private renderColumn(root: HTMLElement, section: Section, items: string[]): void {
-		const title = SECTION_TITLES[section];
+	private renderColumn(root: HTMLElement, section: string, items: string[]): void {
+		const title = section;
 		const column = root.createDiv({ cls: "paranoid-column" });
 
 		const header = column.createDiv({ cls: "paranoid-column-header" });
@@ -119,7 +118,7 @@ export class BoardView extends ItemView {
 		});
 	}
 
-	private renderCard(cardList: HTMLElement, section: Section, index: number, text: string): void {
+	private renderCard(cardList: HTMLElement, section: string, index: number, text: string): void {
 		const card = cardList.createDiv({ cls: "paranoid-card", text });
 		card.draggable = true;
 
@@ -145,7 +144,7 @@ export class BoardView extends ItemView {
 	private renderRemoveZone(root: HTMLElement): void {
 		const zone = root.createDiv({ cls: "paranoid-column paranoid-remove-zone" });
 		const header = zone.createDiv({ cls: "paranoid-column-header" });
-		header.createSpan({ cls: "paranoid-column-title", text: SECTION_TITLES.remove });
+		header.createSpan({ cls: "paranoid-column-title", text: REMOVE_SECTION });
 		const body = zone.createDiv({ cls: "paranoid-remove-body" });
 		setIcon(body.createDiv({ cls: "paranoid-remove-icon" }), "trash-2");
 		body.createDiv({ text: "Drop here to remove" });
@@ -163,7 +162,7 @@ export class BoardView extends ItemView {
 			if (!this.dragged) return;
 			e.preventDefault();
 			zone.removeClass("is-drop-target");
-			this.drop("remove", Number.MAX_SAFE_INTEGER);
+			this.drop(REMOVE_SECTION, Number.MAX_SAFE_INTEGER);
 		});
 	}
 
@@ -190,7 +189,7 @@ export class BoardView extends ItemView {
 		this.dropIndicator?.remove();
 	}
 
-	private drop(to: Section, toIndex: number): void {
+	private drop(to: string, toIndex: number): void {
 		const dragged = this.dragged;
 		this.endDrag();
 		if (!dragged) return;
