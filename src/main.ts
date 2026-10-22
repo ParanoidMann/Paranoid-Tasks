@@ -66,6 +66,22 @@ export default class ParanoidTasksPlugin extends Plugin {
 		await this.applyColumns(next);
 	}
 
+	/** Moves a column to insertion position `to`, counted before the column is removed from its place. */
+	async moveColumnTo(from: number, to: number): Promise<void> {
+		const next = [...this.settings.columns];
+		const [column] = next.splice(from, 1);
+		const insertAt = from < to ? to - 1 : to;
+		if (insertAt === from) return;
+		next.splice(insertAt, 0, column);
+		await this.applyColumns(next);
+	}
+
+	async setColumnDrag(enabled: boolean): Promise<void> {
+		this.settings.columnDrag = enabled;
+		await this.saveData(this.settings);
+		this.refreshBoards();
+	}
+
 	async setCollapsed(column: string, collapsed: boolean): Promise<void> {
 		const others = this.settings.collapsed.filter((c) => c !== column);
 		this.settings.collapsed = collapsed ? [...others, column] : others;
@@ -151,7 +167,12 @@ export default class ParanoidTasksPlugin extends Plugin {
 		const collapsed = Array.isArray(data?.collapsed)
 			? data.collapsed.filter((c): c is string => typeof c === "string" && columns.includes(c))
 			: [];
-		this.settings = { columns, collapsed, priorities: loadPriorities(data?.priorities) };
+		this.settings = {
+			columns,
+			collapsed,
+			columnDrag: typeof data?.columnDrag === "boolean" ? data.columnDrag : DEFAULT_SETTINGS.columnDrag,
+			priorities: loadPriorities(data?.priorities),
+		};
 	}
 
 	private async activateView(): Promise<void> {

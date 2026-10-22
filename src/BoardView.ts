@@ -25,6 +25,8 @@ interface DragState {
 
 export class BoardView extends ItemView {
 	private dragged: DragState | null = null;
+	/** Index of the column being dragged, or null. */
+	private draggedColumn: number | null = null;
 	private dropIndicator: HTMLElement | null = null;
 	private renderToken = 0;
 
@@ -88,15 +90,72 @@ export class BoardView extends ItemView {
 		this.dropIndicator = null;
 
 		// Columns come from settings; Remove is only a drop zone.
-		for (const column of this.plugin.settings.columns) this.renderColumn(root, column, getItems(list, column));
+		this.plugin.settings.columns.forEach((column, index) => {
+			const columnEl = this.plugin.settings.collapsed.includes(column)
+				? this.renderCollapsedColumn(root, column, getItems(list, column))
+				: this.renderColumn(root, column, getItems(list, column));
+			this.setupColumnDrag(columnEl, index);
+		});
 		this.renderRemoveZone(root);
 	}
 
-	private renderColumn(root: HTMLElement, section: string, items: string[]): void {
-		if (this.plugin.settings.collapsed.includes(section)) {
-			this.renderCollapsedColumn(root, section, items);
-			return;
-		}
+	/**
+	 * Lets the column be reordered by dragging its header (or the whole strip
+	 * when collapsed), unless disabled in settings.
+	 */
+	private setupColumnDrag(column: HTMLElement, index: number): void {
+		if (!this.plugin.settings.columnDrag) return;
+		const handle = column.hasClass("is-collapsed")
+			? column
+			: column.querySelector<HTMLElement>(".paranoid-column-header");
+		if (!handle) return;
+		handle.draggable = true;
+		handle.addClass("paranoid-column-handle");
+
+		handle.addEventListener("dragstart", (e) => {
+			this.draggedColumn = index;
+			e.dataTransfer?.setData("text/plain", this.plugin.settings.columns[index]);
+			if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+			column.addClass("is-dragging");
+		});
+		handle.addEventListener("dragend", () => {
+			column.removeClass("is-dragging");
+			this.endDrag();
+		});
+
+		column.addEventListener("dragover", (e) => {
+			if (this.draggedColumn === null) return;
+			e.preventDefault();
+			if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+			const before = this.isLeftHalf(column, e.clientX);
+			this.clearColumnDropMarks();
+			column.addClass(before ? "is-drop-before" : "is-drop-after");
+		});
+		column.addEventListener("dragleave", (e) => {
+			if (!column.contains(e.relatedTarget as Node | null)) this.clearColumnDropMarks();
+		});
+		column.addEventListener("drop", (e) => {
+			if (this.draggedColumn === null) return;
+			e.preventDefault();
+			const from = this.draggedColumn;
+			const to = this.isLeftHalf(column, e.clientX) ? index : index + 1;
+			this.endDrag();
+			void this.plugin.moveColumnTo(from, to).catch((err: Error) => new Notice(`Paranoid Tasks: ${err.message}`));
+		});
+	}
+
+	private isLeftHalf(el: HTMLElement, clientX: number): boolean {
+		const rect = el.getBoundingClientRect();
+		return clientX < rect.left + rect.width / 2;
+	}
+
+	private clearColumnDropMarks(): void {
+		this.contentEl
+			.querySelectorAll(".is-drop-before, .is-drop-after")
+			.forEach((el) => el.removeClasses(["is-drop-before", "is-drop-after"]));
+	}
+
+	private renderColumn(root: HTMLElement, section: string, items: string[]): HTMLElement {
 		const title = section;
 		const column = root.createDiv({ cls: "paranoid-column" });
 
@@ -133,10 +192,11 @@ export class BoardView extends ItemView {
 			const toIndex = this.dropIndex(cardList, e.clientY);
 			this.drop(section, toIndex);
 		});
+		return column;
 	}
 
 	/** Narrow vertical strip with the title; click expands, dropping a card appends it to the column. */
-	private renderCollapsedColumn(root: HTMLElement, section: string, items: string[]): void {
+	private renderCollapsedColumn(root: HTMLElement, section: string, items: string[]): HTMLElement {
 		const column = root.createDiv({
 			cls: "paranoid-column is-collapsed",
 			attr: { "aria-label": `Expand ${section}` },
@@ -160,6 +220,7 @@ export class BoardView extends ItemView {
 			e.preventDefault();
 			this.drop(section, Number.MAX_SAFE_INTEGER);
 		});
+		return column;
 	}
 
 	/** `text` is the raw line from Main.md, including the priority tag. */
@@ -281,7 +342,9 @@ export class BoardView extends ItemView {
 
 	private endDrag(): void {
 		this.dragged = null;
+		this.draggedColumn = null;
 		this.hideIndicator();
+		this.clearColumnDropMarks();
 		this.contentEl.querySelectorAll(".is-drop-target").forEach((el) => el.removeClass("is-drop-target"));
 	}
 }

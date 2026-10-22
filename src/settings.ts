@@ -15,6 +15,8 @@ export interface ParanoidTasksSettings {
 	columns: string[];
 	/** Names of columns collapsed on the board. */
 	collapsed: string[];
+	/** Whether columns can be reordered by dragging on the board. */
+	columnDrag: boolean;
 	/** Task priorities in dropdown order. The first one is the default and is not written to Main.md. */
 	priorities: Priority[];
 }
@@ -22,6 +24,7 @@ export interface ParanoidTasksSettings {
 export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
 	columns: ["Open", "Done"],
 	collapsed: [],
+	columnDrag: true,
 	priorities: [
 		{ name: "Normal", symbol: "●", color: "#4caf50" },
 		{ name: "High", symbol: "●", color: "#ff9800" },
@@ -50,6 +53,15 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 					`"${REMOVE_SECTION}" is always present and cannot be changed.`,
 			)
 			.setHeading();
+
+		new Setting(containerEl)
+			.setName("Drag columns on the board")
+			.setDesc("Reorder columns by dragging their headers.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.columnDrag)
+					.onChange((value) => void this.run(() => this.plugin.setColumnDrag(value), false)),
+			);
 
 		columns.forEach((name, index) => {
 			new Setting(containerEl)

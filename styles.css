@@ -59,6 +59,22 @@
 	white-space: nowrap;
 }
 
+.paranoid-column-handle {
+	cursor: grab;
+}
+
+.paranoid-column.is-dragging {
+	opacity: 0.4;
+}
+
+.paranoid-column.is-drop-before {
+	box-shadow: -3px 0 0 var(--interactive-accent);
+}
+
+.paranoid-column.is-drop-after {
+	box-shadow: 3px 0 0 var(--interactive-accent);
+}
+
 .paranoid-column.is-collapsed.is-drop-target {
 	outline: 2px solid var(--interactive-accent);
 }
