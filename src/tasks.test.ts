@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
 	addTask,
+	daysUntil,
 	clearPriority,
 	editTask,
 	emptyList,
+	escalatePriorities,
 	formatTask,
 	getItems,
 	mergeSection,
@@ -152,16 +154,17 @@ describe("section operations", () => {
 
 describe("priorities", () => {
 	it("parses and formats the priority tag", () => {
-		expect(parseTask("plain task")).toEqual({ priority: null, details: null, text: "plain task" });
-		expect(parseTask("[Priority: High] urgent")).toEqual({ priority: "High", details: null, text: "urgent" });
-		expect(parseTask("[priority:  Very High ]x")).toEqual({ priority: "Very High", details: null, text: "x" });
+		expect(parseTask("plain task")).toEqual({ priority: null, deadline: null, details: null, text: "plain task" });
+		expect(parseTask("[Priority: High] urgent")).toEqual({ priority: "High", deadline: null, details: null, text: "urgent" });
+		expect(parseTask("[priority:  Very High ]x")).toEqual({ priority: "Very High", deadline: null, details: null, text: "x" });
 		expect(parseTask("see [Priority: High] later")).toEqual({
 			priority: null,
+			deadline: null,
 			details: null,
 			text: "see [Priority: High] later",
 		});
-		expect(formatTask({ priority: null, details: null, text: "a" })).toBe("a");
-		expect(formatTask({ priority: "High", details: null, text: "a" })).toBe("[Priority: High] a");
+		expect(formatTask({ priority: null, deadline: null, details: null, text: "a" })).toBe("a");
+		expect(formatTask({ priority: "High", deadline: null, details: null, text: "a" })).toBe("[Priority: High] a");
 	});
 
 	it("survives the Main.md round-trip", () => {
@@ -198,10 +201,10 @@ describe("priorities", () => {
 
 describe("details", () => {
 	it("parses the details tag after or before the priority", () => {
-		const expected = { priority: "High", details: "Note", text: "do it" };
+		const expected = { priority: "High", deadline: null, details: "Note", text: "do it" };
 		expect(parseTask("[Priority: High] [Details: [[Note]]] do it")).toEqual(expected);
 		expect(parseTask("[Details:[[Note]]][Priority: High] do it")).toEqual(expected);
-		expect(parseTask("[Details: [[Note]]] do it")).toEqual({ priority: null, details: "Note", text: "do it" });
+		expect(parseTask("[Details: [[Note]]] do it")).toEqual({ priority: null, deadline: null, details: "Note", text: "do it" });
 	});
 
 	it("takes the link target without alias and heading", () => {
@@ -210,9 +213,9 @@ describe("details", () => {
 
 	it("formats the priority tag first and round-trips", () => {
 		const line = "[Priority: High] [Details: [[Note]]] do it";
-		expect(formatTask({ priority: "High", details: "Note", text: "do it" })).toBe(line);
+		expect(formatTask({ priority: "High", deadline: null, details: "Note", text: "do it" })).toBe(line);
 		expect(formatTask(parseTask(line))).toBe(line);
-		expect(formatTask({ priority: null, details: "Note", text: "x" })).toBe("[Details: [[Note]]] x");
+		expect(formatTask({ priority: null, deadline: null, details: "Note", text: "x" })).toBe("[Details: [[Note]]] x");
 	});
 
 	it("keeps details when changing priorities", () => {
@@ -243,5 +246,69 @@ describe("details", () => {
 		expect(toFileName("ends with dots...")).toBe("ends with dots");
 		expect(toFileName("x".repeat(150))).toHaveLength(100);
 		expect(toFileName("/// ")).toBe("");
+	});
+});
+
+describe("deadlines", () => {
+	it("parses the deadline tag in any order and case", () => {
+		const expected = { priority: "High", deadline: "2026-10-30", details: "N", text: "x" };
+		expect(parseTask("[Priority: High] [Deadline: 2026-10-30] [Details: [[N]]] x")).toEqual(expected);
+		expect(parseTask("[Details: [[N]]] [deadline:2026-10-30] [Priority: High] x")).toEqual(expected);
+	});
+
+	it("keeps an invalid date in the text", () => {
+		expect(parseTask("[Deadline: 2026-13-40] x")).toEqual({
+			priority: null,
+			deadline: null,
+			details: null,
+			text: "[Deadline: 2026-13-40] x",
+		});
+	});
+
+	it("formats tags as priority, deadline, details", () => {
+		const line = "[Priority: High] [Deadline: 2026-10-30] [Details: [[N]]] x";
+		expect(formatTask({ priority: "High", deadline: "2026-10-30", details: "N", text: "x" })).toBe(line);
+		expect(formatTask(parseTask("[Details: [[N]]] [Deadline: 2026-10-30] [Priority: High] x"))).toBe(line);
+		expect(formatTask({ priority: null, deadline: "2026-10-30", details: null, text: "x" })).toBe(
+			"[Deadline: 2026-10-30] x",
+		);
+	});
+
+	it("keeps the deadline when changing priorities", () => {
+		const list = parse("## Open\n- [Priority: High] [Deadline: 2026-10-30] a\n");
+		expect(getItems(clearPriority(list, "High"), "Open")).toEqual(["[Deadline: 2026-10-30] a"]);
+	});
+
+	it("counts days across months and years", () => {
+		expect(daysUntil("2026-10-22", "2026-10-29")).toBe(7);
+		expect(daysUntil("2026-12-30", "2027-01-02")).toBe(3);
+		expect(daysUntil("2026-03-01", "2026-02-27")).toBe(-2);
+		expect(daysUntil("2026-10-22", "2026-10-22")).toBe(0);
+	});
+
+	it("escalates only default-priority tasks within the window", () => {
+		const list = parse(
+			[
+				"## Open",
+				"- [Deadline: 2026-10-24] soon",
+				"- [Deadline: 2026-10-20] overdue",
+				"- [Deadline: 2026-11-30] far",
+				"- [Priority: Low] [Deadline: 2026-10-23] own priority",
+				"- [Priority: Normal] [Deadline: 2026-10-23] explicit default",
+				"- no deadline",
+				"## Remove",
+				"- [Deadline: 2026-10-23] removed",
+			].join("\n"),
+		);
+		const result = escalatePriorities(list, "2026-10-22", 3, "High", "Normal");
+		expect(getItems(result, "Open")).toEqual([
+			"[Priority: High] [Deadline: 2026-10-24] soon",
+			"[Priority: High] [Deadline: 2026-10-20] overdue",
+			"[Deadline: 2026-11-30] far",
+			"[Priority: Low] [Deadline: 2026-10-23] own priority",
+			"[Priority: High] [Deadline: 2026-10-23] explicit default",
+			"no deadline",
+		]);
+		expect(getItems(result, "Remove")).toEqual(["[Deadline: 2026-10-23] removed"]);
 	});
 });

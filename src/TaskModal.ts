@@ -1,7 +1,7 @@
-import { App, Modal, Notice, Setting } from "obsidian";
+import { App, Modal, Notice, Setting, TextComponent } from "obsidian";
 import { ConfirmModal } from "./ConfirmModal";
 import { t } from "./i18n";
-import { sanitize } from "./tasks";
+import { isValidDate, sanitize } from "./tasks";
 
 /**
  * What to do with the details note on save:
@@ -13,6 +13,8 @@ export type DetailsAction = "none" | "keep" | "add" | "remove";
 export interface TaskModalResult {
 	text: string;
 	priority: string;
+	/** Deadline as YYYY-MM-DD, or null for none. */
+	deadline: string | null;
 	details: {
 		action: DetailsAction;
 		/** Note name from the name field (unused when the name follows the task text). */
@@ -26,6 +28,7 @@ export interface TaskModalOptions {
 	/** Priority names for the dropdown, in display order. */
 	priorities: string[];
 	initialPriority: string;
+	initialDeadline: string | null;
 	/** Current details link target, or null if the task has no details. */
 	initialDetails: string | null;
 	/** Whether the current details note exists in the vault. */
@@ -48,6 +51,8 @@ export class TaskModal extends Modal {
 	private input!: HTMLTextAreaElement;
 	private detailsEl!: HTMLElement;
 	private priority: string;
+	private deadline: string | null;
+	private deadlineInput: TextComponent | null = null;
 	private detailsState: DetailsState;
 	private detailsName: string;
 	private submitting = false;
@@ -55,6 +60,7 @@ export class TaskModal extends Modal {
 	constructor(app: App, private options: TaskModalOptions) {
 		super(app);
 		this.priority = options.initialPriority;
+		this.deadline = options.initialDeadline;
 		this.detailsState = options.initialDetails ? "existing" : options.startWithDetails ? "added" : "none";
 		this.detailsName = options.initialDetails ?? "";
 	}
@@ -69,6 +75,23 @@ export class TaskModal extends Modal {
 			for (const name of names) dropdown.addOption(name, name);
 			dropdown.setValue(this.priority).onChange((value) => (this.priority = value));
 		});
+
+		new Setting(this.contentEl)
+			.setName(t("modal.deadline"))
+			.addText((text) => {
+				text.inputEl.type = "date";
+				text.setValue(this.deadline ?? "").onChange((value) => (this.deadline = isValidDate(value) ? value : null));
+				this.deadlineInput = text;
+			})
+			.addExtraButton((b) =>
+				b
+					.setIcon("x")
+					.setTooltip(t("modal.clearDeadline"))
+					.onClick(() => {
+						this.deadline = null;
+						this.deadlineInput?.setValue("");
+					}),
+			);
 
 		this.detailsEl = this.contentEl.createDiv();
 
@@ -193,6 +216,7 @@ export class TaskModal extends Modal {
 				{
 					text,
 					priority: this.priority,
+					deadline: this.deadline,
 					details: { action: this.detailsAction(), name: sanitize(this.detailsName) },
 				},
 				open,

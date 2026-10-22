@@ -16,10 +16,18 @@ export const LANGUAGES = ["en", "ru"] as const;
 export type Language = (typeof LANGUAGES)[number];
 
 let current: Translations = en;
+let currentLanguage = "en";
 
 /** Switches the UI language; unknown languages fall back to English. */
 export function setLanguage(language: string): void {
-	current = LOCALES[language] ?? en;
+	currentLanguage = LOCALES[language] ? language : "en";
+	current = LOCALES[currentLanguage];
+}
+
+/** A YYYY-MM-DD date in the UI language, e.g. "Oct 30, 2026" / "30 окт. 2026 г.". */
+export function formatDate(date: string): string {
+	const [y, m, d] = date.split("-").map(Number);
+	return new Date(y, m - 1, d).toLocaleDateString(currentLanguage, { day: "numeric", month: "short", year: "numeric" });
 }
 
 /** Translated string with `{name}` placeholders replaced from `vars`. */

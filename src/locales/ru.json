@@ -21,8 +21,11 @@
 	"board.dropToRemove": "Перетащите сюда, чтобы убрать",
 	"board.newTaskTitle": "Новая задача в «{column}»",
 	"board.editTaskTitle": "Редактирование задачи",
+	"board.deadline": "Срок: {date}",
 
 	"modal.priority": "Приоритет",
+	"modal.deadline": "Дедлайн",
+	"modal.clearDeadline": "Убрать дедлайн",
 	"modal.details": "Детали",
 	"modal.detailsMissing": "{name} (не найдена)",
 	"modal.detailsFromText": "Называется по тексту задачи",
@@ -46,6 +49,7 @@
 	"error.detailsNameEmpty": "Название заметки с деталями пустое",
 	"error.detailsReserved": "Название «{name}» занято файлом задач",
 	"error.alreadyExists": "{path} уже существует",
+	"error.deadlineDays": "Число дней должно быть целым от 0 до 365",
 
 	"settings.tab.general": "Общие",
 	"settings.tab.columns": "Столбцы",
@@ -96,6 +100,17 @@
 	"settings.deletePriority": "Удалить приоритет",
 	"settings.newPriority": "Новый приоритет",
 	"settings.newPriorityPlaceholder": "Название приоритета",
+
+	"settings.deadline": "Дедлайн",
+	"settings.deadlineShow": "Показывать дедлайн на карточке",
+	"settings.deadlineShowDesc": "Дедлайн пишется мелким шрифтом под текстом задачи; просроченные подсвечиваются.",
+	"settings.deadlineEscalate": "Повышать приоритет при приближении дедлайна",
+	"settings.deadlineEscalateDesc": "Задачи с приоритетом по умолчанию получают выбранный ниже приоритет, когда дедлайн близко. Тег пишется в файл задач. Задачи с приоритетом, выставленным вами, не меняются.",
+	"settings.deadlineDays": "За сколько дней до дедлайна",
+	"settings.deadlineDaysDesc": "Повышать приоритет, когда осталось столько дней или меньше (и для просроченных). 0 — в день дедлайна.",
+	"settings.deadlinePriority": "Какой приоритет ставить",
+	"settings.deadlinePriorityDesc": "Приоритет, который получают задачи с близким дедлайном.",
+	"settings.deadlinePriorityNone": "Сначала добавьте приоритет, отличный от приоритета по умолчанию.",
 
 	"settings.details": "Детали",
 	"settings.detailsDesc": "К задаче можно прикрепить заметку с деталями в папке задач, ссылка пишется как [Details: [[Название]]].",

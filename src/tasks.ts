@@ -127,13 +127,40 @@ export function validatePriorityName(name: string, priorities: string[], index: 
 
 const PRIORITY_TAG = /^\[Priority:\s*([^\]]+?)\s*\]\s*/i;
 const DETAILS_TAG = /^\[Details:\s*\[\[([^\]]+?)\]\]\s*\]\s*/i;
+const DEADLINE_TAG = /^\[Deadline:\s*(\d{4}-\d{2}-\d{2})\s*\]\s*/i;
 
 export interface ParsedTask {
 	/** Priority from the tag, or null if the line has no tag. */
 	priority: string | null;
+	/** Deadline date (YYYY-MM-DD) from `[Deadline: ...]`, or null. */
+	deadline: string | null;
 	/** Link target of the details note from `[Details: [[X]]]`, or null. */
 	details: string | null;
 	text: string;
+}
+
+/** Day number of a YYYY-MM-DD date, or NaN if it is not a real calendar date. */
+function dayNumber(date: string): number {
+	const [y, m, d] = date.split("-").map(Number);
+	const time = Date.UTC(y, m - 1, d);
+	const back = new Date(time);
+	if (back.getUTCFullYear() !== y || back.getUTCMonth() !== m - 1 || back.getUTCDate() !== d) return NaN;
+	return time / 86_400_000;
+}
+
+export function isValidDate(date: string): boolean {
+	return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(dayNumber(date));
+}
+
+/** Whole days from `today` to `deadline` (both YYYY-MM-DD); negative when overdue. */
+export function daysUntil(today: string, deadline: string): number {
+	return dayNumber(deadline) - dayNumber(today);
+}
+
+/** Local date as YYYY-MM-DD. */
+export function toISODate(date: Date): string {
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 /** Link target without alias (`|...`) and heading/block (`#...`) parts. */
@@ -143,12 +170,18 @@ function linkTarget(link: string): string {
 
 /** Splits a task line into its leading tags (in any order) and the text. */
 export function parseTask(raw: string): ParsedTask {
-	const task: ParsedTask = { priority: null, details: null, text: raw };
+	const task: ParsedTask = { priority: null, deadline: null, details: null, text: raw };
 	for (;;) {
 		const priority = task.priority === null ? PRIORITY_TAG.exec(task.text) : null;
 		if (priority) {
 			task.priority = priority[1];
 			task.text = task.text.slice(priority[0].length);
+			continue;
+		}
+		const deadline = task.deadline === null ? DEADLINE_TAG.exec(task.text) : null;
+		if (deadline && isValidDate(deadline[1])) {
+			task.deadline = deadline[1];
+			task.text = task.text.slice(deadline[0].length);
 			continue;
 		}
 		const details = task.details === null ? DETAILS_TAG.exec(task.text) : null;
@@ -161,10 +194,11 @@ export function parseTask(raw: string): ParsedTask {
 	}
 }
 
-/** Builds a task line: priority tag, details tag, text. Null parts are omitted. */
+/** Builds a task line: priority, deadline and details tags, then the text. Null parts are omitted. */
 export function formatTask(task: ParsedTask): string {
 	const parts: string[] = [];
 	if (task.priority) parts.push(`[Priority: ${task.priority}]`);
+	if (task.deadline) parts.push(`[Deadline: ${task.deadline}]`);
 	if (task.details) parts.push(`[Details: [[${task.details}]]]`);
 	parts.push(task.text);
 	return parts.join(" ");
@@ -217,6 +251,33 @@ export function renameDetails(list: TaskList, oldNames: string[], newName: strin
 		if (!task.details || !matches(task.details)) return raw;
 		return formatTask({ ...task, details: newName, text: syncText ? newName : task.text });
 	});
+}
+
+/**
+ * Gives `priority` to default-priority tasks whose deadline is at most `days`
+ * days after `today` (overdue included). Tasks in Remove are left alone.
+ */
+export function escalatePriorities(
+	list: TaskList,
+	today: string,
+	days: number,
+	priority: string,
+	defaultName: string,
+): TaskList {
+	return {
+		preamble: list.preamble,
+		sections: list.sections.map((s) => ({
+			title: s.title,
+			items: sameTitle(s.title, REMOVE_SECTION)
+				? s.items
+				: s.items.map((raw) => {
+						const task = parseTask(raw);
+						const isDefault = task.priority === null || sameTitle(task.priority, defaultName);
+						if (!isDefault || !task.deadline || daysUntil(today, task.deadline) > days) return raw;
+						return formatTask({ ...task, priority });
+					}),
+		})),
+	};
 }
 
 function clone(list: TaskList): TaskList {

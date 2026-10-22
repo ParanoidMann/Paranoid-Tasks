@@ -233,3 +233,24 @@
 .paranoid-board.is-dragging-card .paranoid-remove-zone.is-drag-only {
 	display: flex;
 }
+
+.paranoid-card-body {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	flex-grow: 1;
+}
+
+.paranoid-card-deadline {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.paranoid-card-deadline.is-overdue {
+	color: var(--text-error);
+}
+
+.paranoid-number-input {
+	width: 5em;
+}

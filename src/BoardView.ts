@@ -1,5 +1,5 @@
 import { ItemView, Notice, setIcon, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
-import { t } from "./i18n";
+import { formatDate, t } from "./i18n";
 import type ParanoidTasksPlugin from "./main";
 import type { ColumnConfig, Priority } from "./settings";
 import {
@@ -12,7 +12,9 @@ import {
 	REMOVE_SECTION,
 	sameTitle,
 	TaskList,
+	daysUntil,
 	toFileName,
+	toISODate,
 } from "./tasks";
 import { ensureTaskFile, readTasks, taskFilePath, updateTasks } from "./taskStore";
 import { TaskModal, TaskModalResult } from "./TaskModal";
@@ -268,7 +270,15 @@ export class BoardView extends ItemView {
 				attr: { "aria-label": t("board.unknownPriority", { name: task.priority ?? "" }) },
 			});
 		}
-		card.createSpan({ cls: "paranoid-card-text", text: task.text });
+		const body = card.createDiv({ cls: "paranoid-card-body" });
+		body.createDiv({ cls: "paranoid-card-text", text: task.text });
+		if (task.deadline && this.plugin.settings.deadlineShow) {
+			const overdue = daysUntil(toISODate(new Date()), task.deadline) < 0;
+			body.createDiv({
+				cls: "paranoid-card-deadline" + (overdue ? " is-overdue" : ""),
+				text: t("board.deadline", { date: formatDate(task.deadline) }),
+			});
+		}
 
 		if (task.details && this.plugin.settings.showDetailsIcon) {
 			const details = task.details;
@@ -324,6 +334,7 @@ export class BoardView extends ItemView {
 			initialText: task.text,
 			priorities: priorities.map((p) => p.name),
 			initialPriority: this.findPriority(task.priority)?.name ?? task.priority ?? priorities[0].name,
+			initialDeadline: task.deadline,
 			initialDetails: task.details,
 			detailsExists: task.details !== null && resolveDetails(this.app, task.details) !== null,
 			detailsFromText: this.plugin.settings.detailsFromText,
@@ -348,7 +359,7 @@ export class BoardView extends ItemView {
 		const columns = this.plugin.columnNames();
 		const priority = sameTitle(result.priority, priorities[0].name) ? null : result.priority;
 		const write = (details: string | null) =>
-			updateTasks(this.app, columns, (l) => apply(l, formatTask({ priority, details, text: result.text })));
+			updateTasks(this.app, columns, (l) => apply(l, formatTask({ priority, deadline: result.deadline, details, text: result.text })));
 		// An empty name field means "same as the task text".
 		const name = toFileName(detailsFromText || !result.details.name ? result.text : result.details.name);
 		const oldFile = oldDetails ? resolveDetails(this.app, oldDetails) : null;

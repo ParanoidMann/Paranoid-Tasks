@@ -68,6 +68,14 @@ export interface ParanoidTasksSettings {
 	showDetailsIcon: boolean;
 	/** New tasks start with "Add details" already pressed. */
 	detailsByDefault: boolean;
+	/** Show the deadline under the task text on cards. */
+	deadlineShow: boolean;
+	/** Raise the priority of default-priority tasks as their deadline approaches (rewrites the task file). */
+	deadlineEscalate: boolean;
+	/** Escalate when at most this many days are left (overdue included). */
+	deadlineDays: number;
+	/** Priority given by escalation; a non-default priority name. */
+	deadlinePriority: string;
 }
 
 export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
@@ -86,6 +94,10 @@ export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
 	detailsFromText: false,
 	showDetailsIcon: true,
 	detailsByDefault: false,
+	deadlineShow: true,
+	deadlineEscalate: false,
+	deadlineDays: 3,
+	deadlinePriority: "High",
 };
 
 type SettingsTab = "general" | "columns" | "cards";
@@ -187,6 +199,7 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 				break;
 			case "cards":
 				this.displayPriorities(body);
+				this.displayDeadline(body);
 				this.displayDetails(body);
 				break;
 		}
@@ -262,6 +275,55 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 				text.inputEl.addEventListener("change", () => {
 					void this.run(() => this.plugin.changeTaskLocation({ taskFile: text.getValue() }));
 				});
+			});
+	}
+
+	private displayDeadline(containerEl: HTMLElement): void {
+		const { deadlineShow, deadlineEscalate, deadlineDays, deadlinePriority, priorities } = this.plugin.settings;
+		const update = (patch: Parameters<ParanoidTasksPlugin["updateDeadlineSettings"]>[0], rerender = false) =>
+			void this.run(() => this.plugin.updateDeadlineSettings(patch), rerender);
+
+		new Setting(containerEl).setName(t("settings.deadline")).setHeading();
+
+		new Setting(containerEl)
+			.setName(t("settings.deadlineShow"))
+			.setDesc(t("settings.deadlineShowDesc"))
+			.addToggle((toggle) => toggle.setValue(deadlineShow).onChange((value) => update({ deadlineShow: value })));
+
+		new Setting(containerEl)
+			.setName(t("settings.deadlineEscalate"))
+			.setDesc(t("settings.deadlineEscalateDesc"))
+			// Re-render to enable/disable the two settings below.
+			.addToggle((toggle) =>
+				toggle.setValue(deadlineEscalate).onChange((value) => update({ deadlineEscalate: value }, true)),
+			);
+
+		new Setting(containerEl)
+			.setName(t("settings.deadlineDays"))
+			.setDesc(t("settings.deadlineDaysDesc"))
+			.setDisabled(!deadlineEscalate)
+			.addText((text) => {
+				text.inputEl.type = "number";
+				text.inputEl.min = "0";
+				text.inputEl.max = "365";
+				text.inputEl.addClass("paranoid-number-input");
+				text.setValue(String(deadlineDays)).setDisabled(!deadlineEscalate);
+				text.inputEl.addEventListener("change", () => {
+					update({ deadlineDays: Number(text.getValue()) }, true);
+				});
+			});
+
+		const candidates = priorities.slice(1);
+		new Setting(containerEl)
+			.setName(t("settings.deadlinePriority"))
+			.setDesc(candidates.length > 0 ? t("settings.deadlinePriorityDesc") : t("settings.deadlinePriorityNone"))
+			.setDisabled(!deadlineEscalate || candidates.length === 0)
+			.addDropdown((dropdown) => {
+				for (const p of candidates) dropdown.addOption(p.name, p.name);
+				dropdown
+					.setValue(deadlinePriority)
+					.setDisabled(!deadlineEscalate || candidates.length === 0)
+					.onChange((value) => update({ deadlinePriority: value }));
 			});
 	}
 

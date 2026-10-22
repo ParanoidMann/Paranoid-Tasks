@@ -21,8 +21,11 @@
 	"board.dropToRemove": "Drop here to remove",
 	"board.newTaskTitle": "New task in {column}",
 	"board.editTaskTitle": "Edit task",
+	"board.deadline": "Due {date}",
 
 	"modal.priority": "Priority",
+	"modal.deadline": "Deadline",
+	"modal.clearDeadline": "Clear deadline",
 	"modal.details": "Details",
 	"modal.detailsMissing": "{name} (not found)",
 	"modal.detailsFromText": "Named after the task text",
@@ -46,6 +49,7 @@
 	"error.detailsNameEmpty": "Details name is empty",
 	"error.detailsReserved": "\"{name}\" is reserved for the task list",
 	"error.alreadyExists": "{path} already exists",
+	"error.deadlineDays": "Days must be a whole number from 0 to 365",
 
 	"settings.tab.general": "General",
 	"settings.tab.columns": "Columns",
@@ -96,6 +100,17 @@
 	"settings.deletePriority": "Delete priority",
 	"settings.newPriority": "New priority",
 	"settings.newPriorityPlaceholder": "Priority name",
+
+	"settings.deadline": "Deadline",
+	"settings.deadlineShow": "Show deadline on cards",
+	"settings.deadlineShowDesc": "The deadline is shown in small text under the task text; overdue ones are highlighted.",
+	"settings.deadlineEscalate": "Raise priority as the deadline approaches",
+	"settings.deadlineEscalateDesc": "Tasks with the default priority get the priority chosen below when their deadline is close. The tag is written to the task file. Tasks with a priority set by you are not changed.",
+	"settings.deadlineDays": "Days before the deadline",
+	"settings.deadlineDaysDesc": "Raise the priority when this many days or fewer are left (overdue tasks too). 0 means on the deadline day.",
+	"settings.deadlinePriority": "Priority to set",
+	"settings.deadlinePriorityDesc": "Priority given to tasks whose deadline is close.",
+	"settings.deadlinePriorityNone": "Add a priority other than the default one first.",
 
 	"settings.details": "Details",
 	"settings.detailsDesc": "A task can have a details note in the task folder, linked as [Details: [[Name]]].",

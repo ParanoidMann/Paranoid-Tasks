@@ -1,4 +1,4 @@
-import { getIconIds, getLanguage, normalizePath, Notice, Plugin, setIcon, TAbstractFile, TFile } from "obsidian";
+import { debounce, getIconIds, getLanguage, normalizePath, Notice, Plugin, setIcon, TAbstractFile, TFile } from "obsidian";
 import { BoardView, VIEW_TYPE_BOARD } from "./BoardView";
 import { Language, LANGUAGES, setLanguage, t } from "./i18n";
 import {
@@ -15,6 +15,7 @@ import {
 import {
 	clearPriority,
 	DEFAULT_COLUMN,
+	escalatePriorities,
 	mergeSection,
 	renameDetails,
 	renamePriority as renamePriorityTags,
@@ -23,6 +24,7 @@ import {
 	serialize,
 	TaskList,
 	toFileName,
+	toISODate,
 	validateColumnName,
 	validatePriorityName,
 } from "./tasks";
@@ -48,6 +50,17 @@ export default class ParanoidTasksPlugin extends Plugin {
 		});
 
 		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => void this.onFileRenamed(file, oldPath)));
+
+		// Deadline escalation: on start, every hour (the day may change) and shortly after the task file changes.
+		// It only writes when something changes, so reacting to its own writes does not loop.
+		const checkSoon = debounce(() => void this.checkDeadlines(), 1000, true);
+		this.registerEvent(
+			this.app.vault.on("modify", (file) => {
+				if (file.path === taskFilePath()) checkSoon();
+			}),
+		);
+		this.registerInterval(window.setInterval(() => void this.checkDeadlines(), 60 * 60 * 1000));
+		this.app.workspace.onLayoutReady(() => void this.checkDeadlines());
 	}
 
 	/**
@@ -95,6 +108,39 @@ export default class ParanoidTasksPlugin extends Plugin {
 			this.updateBoardChrome();
 		}
 		this.refreshBoards();
+	}
+
+	/** Changes deadline settings and applies escalation right away. */
+	async updateDeadlineSettings(
+		patch: Partial<Pick<ParanoidTasksSettings, "deadlineShow" | "deadlineEscalate" | "deadlineDays" | "deadlinePriority">>,
+	): Promise<void> {
+		if (patch.deadlineDays !== undefined) {
+			const days = patch.deadlineDays;
+			if (!Number.isInteger(days) || days < 0 || days > 365) throw new Error(t("error.deadlineDays"));
+		}
+		await this.updateSettings(patch);
+		await this.checkDeadlines();
+	}
+
+	/**
+	 * Gives the configured priority to default-priority tasks whose deadline is
+	 * close (writes the task file). Does nothing when the feature is off.
+	 */
+	async checkDeadlines(): Promise<void> {
+		const { deadlineEscalate, deadlineDays, deadlinePriority, priorities } = this.settings;
+		if (!deadlineEscalate || !deadlinePriority) return;
+		if (!(this.app.vault.getAbstractFileByPath(taskFilePath()) instanceof TFile)) return;
+
+		const today = toISODate(new Date());
+		const escalate = (l: TaskList) =>
+			escalatePriorities(l, today, deadlineDays, deadlinePriority, priorities[0].name);
+		try {
+			const list = await readTasks(this.app);
+			if (serialize(escalate(list)) === serialize(list)) return;
+			await updateTasks(this.app, this.columnNames(), escalate);
+		} catch (e) {
+			new Notice(t("notice.error", { message: (e as Error).message }));
+		}
 	}
 
 	private applyLanguage(): void {
@@ -215,6 +261,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 		if (name === oldName) return;
 		assertValid(validatePriorityName(name, priorities.map((p) => p.name), index));
 		if (index > 0) await updateTasks(this.app, this.columnNames(), (l) => renamePriorityTags(l, oldName, name));
+		if (this.settings.deadlinePriority === oldName) this.settings.deadlinePriority = name;
 		await this.savePriorities(priorities.map((p, i) => (i === index ? { ...p, name } : p)));
 	}
 
@@ -244,6 +291,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 
 	private async savePriorities(priorities: Priority[]): Promise<void> {
 		this.settings.priorities = priorities;
+		this.settings.deadlinePriority = validDeadlinePriority(this.settings.deadlinePriority, priorities);
 		await this.saveData(this.settings);
 		this.refreshBoards();
 	}
@@ -285,8 +333,20 @@ export default class ParanoidTasksPlugin extends Plugin {
 			priorities: loadPriorities(data?.priorities),
 			detailsFromText: loadBoolean(data?.detailsFromText, DEFAULT_SETTINGS.detailsFromText),
 			detailsByDefault: loadBoolean(data?.detailsByDefault, DEFAULT_SETTINGS.detailsByDefault),
+			deadlineShow: loadBoolean(data?.deadlineShow, DEFAULT_SETTINGS.deadlineShow),
+			deadlineEscalate: loadBoolean(data?.deadlineEscalate, DEFAULT_SETTINGS.deadlineEscalate),
+			deadlineDays:
+				typeof data?.deadlineDays === "number" && Number.isInteger(data.deadlineDays) && data.deadlineDays >= 0
+					? Math.min(data.deadlineDays, 365)
+					: DEFAULT_SETTINGS.deadlineDays,
+			deadlinePriority: "",
 			showDetailsIcon: loadBoolean(data?.showDetailsIcon, DEFAULT_SETTINGS.showDetailsIcon),
 		};
+		// Validated against the loaded priorities.
+		this.settings.deadlinePriority = validDeadlinePriority(
+			typeof data?.deadlinePriority === "string" ? data.deadlinePriority : DEFAULT_SETTINGS.deadlinePriority,
+			this.settings.priorities,
+		);
 	}
 
 	private async activateView(): Promise<void> {
@@ -318,6 +378,15 @@ function loadRemoveZone(data: { removeZone?: unknown; showRemove?: unknown } | n
 
 function loadLanguage(value: unknown): LanguagePreference {
 	return value === "auto" || LANGUAGES.includes(value as Language) ? (value as LanguagePreference) : "auto";
+}
+
+/**
+ * The escalation target must be an existing non-default priority; otherwise
+ * falls back to the first non-default one ("" if there is none).
+ */
+function validDeadlinePriority(name: string, priorities: Priority[]): string {
+	const candidates = priorities.slice(1);
+	return candidates.find((p) => p.name === name)?.name ?? candidates[0]?.name ?? "";
 }
 
 function assertValid(error: string | null): void {
