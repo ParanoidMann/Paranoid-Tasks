@@ -404,8 +404,13 @@ export class BoardView extends ItemView {
 			initialDetails: task.details,
 			detailsExists: detailsFile !== null,
 			detailsFromText: this.plugin.settings.detailsFromText,
-			// raw is "" only for a new task.
-			startWithDetails: raw === "" && this.plugin.settings.detailsByDefault,
+			fields: {
+				details: this.plugin.settings.dialogDetails,
+				priority: this.plugin.settings.dialogPriority,
+				deadline: this.plugin.settings.dialogDeadline,
+			},
+			// raw is "" only for a new task; hidden details are never added by default.
+			startWithDetails: raw === "" && this.plugin.settings.detailsByDefault && this.plugin.settings.dialogDetails,
 			onSubmit: (result, open) => this.saveTask(task.details, result, open, apply),
 			onDelete: remove,
 			deleteNote: trashesDetails ? t("modal.deleteTaskDetails", { name: task.details ?? "" }) : undefined,

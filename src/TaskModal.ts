@@ -35,6 +35,8 @@ export interface TaskModalOptions {
 	detailsExists: boolean;
 	/** The note name follows the task text, so there is no name field. */
 	detailsFromText: boolean;
+	/** Which optional rows the dialog shows; hidden values are kept as they are. */
+	fields: { details: boolean; priority: boolean; deadline: boolean };
 	/** Start with details added (for new tasks when "Create details by default" is on). */
 	startWithDetails: boolean;
 	/**
@@ -56,7 +58,7 @@ type DetailsState = "none" | "existing" | "added" | "removed";
 
 export class TaskModal extends Modal {
 	private input!: HTMLTextAreaElement;
-	private detailsEl!: HTMLElement;
+	private detailsEl: HTMLElement | null = null;
 	private priority: string;
 	private deadline: string | null;
 	private deadlineInput: TextComponent | null = null;
@@ -76,34 +78,16 @@ export class TaskModal extends Modal {
 		this.titleEl.setText(this.options.title);
 		this.modalEl.addClass("paranoid-task-modal");
 		// Compact label/control rows (styled in styles.css), then the task text below.
-		const fields = this.contentEl.createDiv({ cls: "paranoid-task-fields" });
+		// Rows can be hidden in settings; then their current values are saved unchanged.
+		const shown = this.options.fields;
+		const fields =
+			shown.details || shown.priority || shown.deadline
+				? this.contentEl.createDiv({ cls: "paranoid-task-fields" })
+				: null;
 		// Details first, then priority and deadline.
-		this.detailsEl = fields.createDiv();
-
-		// Keep a priority that is not in settings (e.g. typed into Main.md by hand) so saving does not drop it.
-		const names = [...this.options.priorities];
-		if (!names.includes(this.priority)) names.push(this.priority);
-		new Setting(fields).setName(t("modal.priority")).addDropdown((dropdown) => {
-			for (const name of names) dropdown.addOption(name, name);
-			dropdown.setValue(this.priority).onChange((value) => (this.priority = value));
-		});
-
-		new Setting(fields)
-			.setName(t("modal.deadline"))
-			.addText((text) => {
-				text.inputEl.type = "date";
-				text.setValue(this.deadline ?? "").onChange((value) => (this.deadline = isValidDate(value) ? value : null));
-				this.deadlineInput = text;
-			})
-			.addExtraButton((b) =>
-				b
-					.setIcon("x")
-					.setTooltip(t("modal.clearDeadline"))
-					.onClick(() => {
-						this.deadline = null;
-						this.deadlineInput?.setValue("");
-					}),
-			);
+		if (fields && shown.details) this.detailsEl = fields.createDiv();
+		if (fields && shown.priority) this.renderPriority(fields);
+		if (fields && shown.deadline) this.renderDeadline(fields);
 
 		const label = this.contentEl.createEl("label", { cls: "paranoid-modal-label", text: t("modal.text") });
 		this.input = this.contentEl.createEl("textarea", { cls: "paranoid-modal-input" });
@@ -143,7 +127,37 @@ export class TaskModal extends Modal {
 		this.contentEl.empty();
 	}
 
+	private renderPriority(containerEl: HTMLElement): void {
+		// Keep a priority that is not in settings (e.g. typed into Main.md by hand) so saving does not drop it.
+		const names = [...this.options.priorities];
+		if (!names.includes(this.priority)) names.push(this.priority);
+		new Setting(containerEl).setName(t("modal.priority")).addDropdown((dropdown) => {
+			for (const name of names) dropdown.addOption(name, name);
+			dropdown.setValue(this.priority).onChange((value) => (this.priority = value));
+		});
+	}
+
+	private renderDeadline(containerEl: HTMLElement): void {
+		new Setting(containerEl)
+			.setName(t("modal.deadline"))
+			.addText((text) => {
+				text.inputEl.type = "date";
+				text.setValue(this.deadline ?? "").onChange((value) => (this.deadline = isValidDate(value) ? value : null));
+				this.deadlineInput = text;
+			})
+			.addExtraButton((b) =>
+				b
+					.setIcon("x")
+					.setTooltip(t("modal.clearDeadline"))
+					.onClick(() => {
+						this.deadline = null;
+						this.deadlineInput?.setValue("");
+					}),
+			);
+	}
+
 	private renderDetails(): void {
+		if (!this.detailsEl) return;
 		this.detailsEl.empty();
 		const setting = new Setting(this.detailsEl).setName(t("modal.details"));
 		const { detailsFromText, initialDetails, detailsExists } = this.options;

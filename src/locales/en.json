@@ -102,6 +102,8 @@
 	"settings.newColumn": "New column",
 	"settings.columnNamePlaceholder": "Column name",
 
+	"settings.showInDialog": "Show in the task dialog",
+	"settings.showInDialogDesc": "When off, this field is hidden in the task dialog; values already set on tasks are kept.",
 	"settings.priorities": "Priorities",
 	"settings.prioritiesDesc": "Shown as a symbol before the task text and written to the task file as [Priority: Name]. The first priority is the default: it has no tag and cannot be deleted. Deleting a priority makes its tasks default.",
 	"settings.defaultPriority": "Default — not written to the task file",

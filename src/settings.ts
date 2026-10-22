@@ -68,6 +68,10 @@ export interface ParanoidTasksSettings {
 	showDetailsIcon: boolean;
 	/** New tasks start with "Add details" already pressed. */
 	detailsByDefault: boolean;
+	/** Show the Details / Priority / Deadline rows in the task dialog. */
+	dialogDetails: boolean;
+	dialogPriority: boolean;
+	dialogDeadline: boolean;
 	/** Keep the details note when its task is deleted (otherwise it goes to trash). */
 	keepDetailsOnDelete: boolean;
 	/** Show the deadline under the task text on cards. */
@@ -96,6 +100,9 @@ export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
 	detailsFromText: false,
 	showDetailsIcon: true,
 	detailsByDefault: false,
+	dialogDetails: true,
+	dialogPriority: true,
+	dialogDeadline: true,
 	keepDetailsOnDelete: false,
 	deadlineShow: true,
 	deadlineEscalate: false,
@@ -287,6 +294,7 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 			void this.run(() => this.plugin.updateDeadlineSettings(patch), rerender);
 
 		new Setting(containerEl).setName(t("settings.deadline")).setHeading();
+		this.addDialogToggle(containerEl, "dialogDeadline");
 
 		new Setting(containerEl)
 			.setName(t("settings.deadlineShow"))
@@ -335,6 +343,7 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 			.setName(t("settings.details"))
 			.setDesc(t("settings.detailsDesc"))
 			.setHeading();
+		this.addDialogToggle(containerEl, "dialogDetails");
 
 		new Setting(containerEl)
 			.setName(t("settings.detailsFromText"))
@@ -467,6 +476,7 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 			.setName(t("settings.priorities"))
 			.setDesc(t("settings.prioritiesDesc"))
 			.setHeading();
+		this.addDialogToggle(containerEl, "dialogPriority");
 
 		priorities.forEach((priority, index) => {
 			const isDefault = index === 0;
@@ -516,6 +526,18 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 		});
 
 		this.addNewItemRow(containerEl, t("settings.newPriority"), t("settings.newPriorityPlaceholder"), (name) => this.plugin.addPriority(name));
+	}
+
+	/** "Show in task dialog" toggle for one of the optional dialog rows. */
+	private addDialogToggle(containerEl: HTMLElement, key: "dialogDetails" | "dialogPriority" | "dialogDeadline"): void {
+		new Setting(containerEl)
+			.setName(t("settings.showInDialog"))
+			.setDesc(t("settings.showInDialogDesc"))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings[key])
+					.onChange((value) => void this.run(() => this.plugin.updateSettings({ [key]: value }), false)),
+			);
 	}
 
 	/** Text field + Add button (Enter also adds). */
