@@ -1,4 +1,14 @@
-import { AbstractInputSuggest, App, Notice, PluginSettingTab, Setting, TFolder } from "obsidian";
+import {
+	AbstractInputSuggest,
+	App,
+	getIconIds,
+	Notice,
+	PluginSettingTab,
+	setIcon,
+	Setting,
+	TFolder,
+	ToggleComponent,
+} from "obsidian";
 import type ParanoidTasksPlugin from "./main";
 import { REMOVE_SECTION } from "./tasks";
 import { DEFAULT_TASK_FILE, DEFAULT_TASK_FOLDER } from "./taskStore";
@@ -11,15 +21,32 @@ export interface Priority {
 	color: string;
 }
 
+export interface ColumnConfig {
+	/** Column title; also the section heading in the task file. */
+	name: string;
+	/** Whether the column can be collapsed into a narrow strip. */
+	collapsible: boolean;
+	/** Show the number of tasks next to the title. */
+	showCount: boolean;
+	/** Currently collapsed (kept while collapsing is off, so it comes back when re-enabled). */
+	collapsed: boolean;
+}
+
+export function newColumn(name: string): ColumnConfig {
+	return { name, collapsible: true, showCount: true, collapsed: false };
+}
+
 export interface ParanoidTasksSettings {
 	/** Folder with the task file and details notes ("" for the vault root). */
 	taskFolder: string;
 	/** Task file name without ".md". */
 	taskFile: string;
+	/** Board title in the ribbon tooltip and the tab header. */
+	boardName: string;
+	/** Icon id of the board in the ribbon and the tab header. */
+	boardIcon: string;
 	/** Board columns in display order. Never contains Remove. */
-	columns: string[];
-	/** Names of columns collapsed on the board. */
-	collapsed: string[];
+	columns: ColumnConfig[];
 	/** Whether columns can be reordered by dragging on the board. */
 	columnDrag: boolean;
 	/** Task priorities in dropdown order. The first one is the default and is not written to Main.md. */
@@ -28,13 +55,16 @@ export interface ParanoidTasksSettings {
 	detailsFromText: boolean;
 	/** Show an icon opening the details note on cards. */
 	showDetailsIcon: boolean;
+	/** New tasks start with "Add details" already pressed. */
+	detailsByDefault: boolean;
 }
 
 export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
 	taskFolder: DEFAULT_TASK_FOLDER,
 	taskFile: DEFAULT_TASK_FILE,
-	columns: ["Open", "Done"],
-	collapsed: [],
+	boardName: "Task board",
+	boardIcon: "layout-dashboard",
+	columns: [newColumn("Open"), newColumn("Done")],
 	columnDrag: true,
 	priorities: [
 		{ name: "Normal", symbol: "●", color: "#4caf50" },
@@ -42,6 +72,7 @@ export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
 	],
 	detailsFromText: false,
 	showDetailsIcon: true,
+	detailsByDefault: false,
 };
 
 type SettingsTab = "general" | "columns" | "cards";
@@ -79,6 +110,36 @@ class FolderSuggest extends AbstractInputSuggest<TFolder> {
 		this.setValue(path);
 		this.close();
 		this.onPick(path);
+	}
+}
+
+/** Suggests icon ids (with a preview) while typing into a text input. */
+class IconSuggest extends AbstractInputSuggest<string> {
+	constructor(
+		app: App,
+		inputEl: HTMLInputElement,
+		private onPick: (id: string) => void,
+	) {
+		super(app, inputEl);
+	}
+
+	protected getSuggestions(query: string): string[] {
+		const q = query.toLowerCase().trim();
+		return getIconIds()
+			.filter((id) => id.includes(q))
+			.slice(0, 100);
+	}
+
+	renderSuggestion(id: string, el: HTMLElement): void {
+		el.addClass("paranoid-icon-suggestion");
+		setIcon(el.createSpan(), id);
+		el.createSpan({ text: id });
+	}
+
+	selectSuggestion(id: string): void {
+		this.setValue(id);
+		this.close();
+		this.onPick(id);
 	}
 }
 
@@ -124,6 +185,31 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 	}
 
 	private displayGeneral(containerEl: HTMLElement): void {
+		const { boardName, boardIcon } = this.plugin.settings;
+		new Setting(containerEl).setName("Board").setHeading();
+
+		new Setting(containerEl)
+			.setName("Board name")
+			.setDesc("Shown in the left ribbon tooltip and on the board tab.")
+			.addText((text) => {
+				text.setPlaceholder(DEFAULT_SETTINGS.boardName).setValue(boardName);
+				text.inputEl.addEventListener("change", () => {
+					void this.run(() => this.plugin.changeBoardAppearance({ boardName: text.getValue() }));
+				});
+			});
+
+		const iconSetting = new Setting(containerEl)
+			.setName("Board icon")
+			.setDesc("Icon in the left ribbon and on the board tab. Start typing to search icons (lucide.dev names work).");
+		const preview = iconSetting.controlEl.createDiv({ cls: "paranoid-icon-preview" });
+		setIcon(preview, boardIcon);
+		iconSetting.addText((text) => {
+			text.setPlaceholder(DEFAULT_SETTINGS.boardIcon).setValue(boardIcon);
+			const apply = (id: string) => void this.run(() => this.plugin.changeBoardAppearance({ boardIcon: id }));
+			new IconSuggest(this.app, text.inputEl, apply);
+			text.inputEl.addEventListener("change", () => apply(text.getValue()));
+		});
+
 		new Setting(containerEl)
 			.setName("Storage")
 			.setDesc(
@@ -176,6 +262,17 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName("Create details by default")
+			.setDesc("New tasks start with details added; you can still remove them in the task dialog before saving.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.detailsByDefault)
+					.onChange(
+						(value) => void this.run(() => this.plugin.updateSettings({ detailsByDefault: value }), false),
+					),
+			);
+
+		new Setting(containerEl)
 			.setName("Show details icon on cards")
 			.setDesc("Clicking the icon opens the details note.")
 			.addToggle((toggle) =>
@@ -193,7 +290,7 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Columns")
 			.setDesc(
-				`Each column is a section in Tasks/Main.md. Deleting a column moves its tasks to the first remaining column. ` +
+				`Each column is a section in the task file. Deleting a column moves its tasks to the first remaining column. ` +
 					`"${REMOVE_SECTION}" is always present and cannot be changed.`,
 			)
 			.setHeading();
@@ -207,10 +304,10 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 					.onChange((value) => void this.run(() => this.plugin.setColumnDrag(value), false)),
 			);
 
-		columns.forEach((name, index) => {
-			new Setting(containerEl)
+		columns.forEach((column, index) => {
+			const setting = new Setting(containerEl)
 				.addText((text) => {
-					text.setValue(name);
+					text.setValue(column.name);
 					// "change" fires on blur/Enter, so the file is not rewritten on every keystroke.
 					text.inputEl.addEventListener("change", () => {
 						void this.run(() => this.plugin.renameColumn(index, text.getValue()));
@@ -236,6 +333,21 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 						.setTooltip("Delete column")
 						.onClick(() => void this.run(() => this.plugin.deleteColumn(index))),
 				);
+			setting.settingEl.addClass("paranoid-column-setting");
+
+			// Per-column options under the name: small labelled toggles.
+			const options = setting.infoEl.createDiv({ cls: "paranoid-column-options" });
+			const addOption = (label: string, tooltip: string, value: boolean, onChange: (v: boolean) => void) => {
+				const option = options.createEl("label", { cls: "paranoid-column-option", attr: { "aria-label": tooltip } });
+				new ToggleComponent(option).setValue(value).onChange(onChange);
+				option.createSpan({ text: label });
+			};
+			addOption("Collapsible", "Show the arrow that collapses this column", column.collapsible, (collapsible) => {
+				void this.run(() => this.plugin.updateColumn(index, { collapsible }), false);
+			});
+			addOption("Task count", "Show the number of tasks next to the title", column.showCount, (showCount) => {
+				void this.run(() => this.plugin.updateColumn(index, { showCount }), false);
+			});
 		});
 
 		this.addNewItemRow(containerEl, "New column", "Column name", (name) => this.plugin.addColumn(name));

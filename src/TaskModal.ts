@@ -1,6 +1,6 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import { ConfirmModal } from "./ConfirmModal";
-import { sanitize, toFileName } from "./tasks";
+import { sanitize } from "./tasks";
 
 /**
  * What to do with the details note on save:
@@ -31,6 +31,8 @@ export interface TaskModalOptions {
 	detailsExists: boolean;
 	/** The note name follows the task text, so there is no name field. */
 	detailsFromText: boolean;
+	/** Start with details added (for new tasks when "Create details by default" is on). */
+	startWithDetails: boolean;
 	/**
 	 * Applies the result; `open` asks to open the details note afterwards.
 	 * Throwing keeps the modal open and shows the error.
@@ -52,7 +54,7 @@ export class TaskModal extends Modal {
 	constructor(app: App, private options: TaskModalOptions) {
 		super(app);
 		this.priority = options.initialPriority;
-		this.detailsState = options.initialDetails ? "existing" : "none";
+		this.detailsState = options.initialDetails ? "existing" : options.startWithDetails ? "added" : "none";
 		this.detailsName = options.initialDetails ?? "";
 	}
 
@@ -109,7 +111,7 @@ export class TaskModal extends Modal {
 							this.detailsName = initialDetails ?? "";
 						} else {
 							this.detailsState = "added";
-							this.detailsName = toFileName(this.input.value);
+							this.detailsName = "";
 						}
 						this.renderDetails();
 					}),
@@ -125,7 +127,7 @@ export class TaskModal extends Modal {
 			if (missing) setting.setDesc("Note not found");
 			setting.addText((text) =>
 				text
-					.setPlaceholder("Note name")
+					.setPlaceholder(existing ? "Note name" : "Same as task text")
 					.setValue(this.detailsName)
 					.onChange((value) => (this.detailsName = value)),
 			);

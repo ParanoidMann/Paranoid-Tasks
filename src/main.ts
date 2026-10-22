@@ -1,6 +1,13 @@
-import { normalizePath, Notice, Plugin, TAbstractFile, TFile } from "obsidian";
+import { getIconIds, normalizePath, Notice, Plugin, setIcon, TAbstractFile, TFile } from "obsidian";
 import { BoardView, VIEW_TYPE_BOARD } from "./BoardView";
-import { DEFAULT_SETTINGS, ParanoidTasksSettings, ParanoidTasksSettingTab, Priority } from "./settings";
+import {
+	ColumnConfig,
+	DEFAULT_SETTINGS,
+	newColumn,
+	ParanoidTasksSettings,
+	ParanoidTasksSettingTab,
+	Priority,
+} from "./settings";
 import {
 	clearPriority,
 	DEFAULT_COLUMN,
@@ -19,6 +26,7 @@ import { ensureTaskFile, readTasks, setTaskLocation, taskFilePath, taskFolder, u
 
 export default class ParanoidTasksPlugin extends Plugin {
 	settings: ParanoidTasksSettings = { ...DEFAULT_SETTINGS };
+	private ribbonEl: HTMLElement | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -26,7 +34,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 		this.registerView(VIEW_TYPE_BOARD, (leaf) => new BoardView(leaf, this));
 		this.addSettingTab(new ParanoidTasksSettingTab(this.app, this));
 
-		this.addRibbonIcon("layout-dashboard", "Open task board", () => void this.activateView());
+		this.ribbonEl = this.addRibbonIcon(this.settings.boardIcon, this.settings.boardName, () => void this.activateView());
 		this.addCommand({
 			id: "open-board",
 			name: "Open task board",
@@ -48,12 +56,30 @@ export default class ParanoidTasksPlugin extends Plugin {
 
 		setTaskLocation(folder, file);
 		try {
-			await ensureTaskFile(this.app, this.settings.columns);
+			await ensureTaskFile(this.app, this.columnNames());
 		} catch (e) {
 			setTaskLocation(this.settings.taskFolder, this.settings.taskFile);
 			throw e;
 		}
 		await this.updateSettings({ taskFolder: folder, taskFile: file });
+	}
+
+	/** Changes the board name/icon shown in the ribbon and on open board tabs. */
+	async changeBoardAppearance(patch: { boardName?: string; boardIcon?: string }): Promise<void> {
+		const name = patch.boardName !== undefined ? sanitize(patch.boardName) : this.settings.boardName;
+		const icon = patch.boardIcon !== undefined ? patch.boardIcon.trim() : this.settings.boardIcon;
+		if (!name) throw new Error("Board name is empty");
+		if (!isIconId(icon)) throw new Error(`Unknown icon "${icon}"`);
+
+		await this.updateSettings({ boardName: name, boardIcon: icon });
+		if (this.ribbonEl) {
+			setIcon(this.ribbonEl, icon);
+			this.ribbonEl.setAttr("aria-label", name);
+		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BOARD)) {
+			// Not in the public API; without it the tab header updates after reopening the board.
+			(leaf as unknown as { updateHeader?: () => void }).updateHeader?.();
+		}
 	}
 
 	async updateSettings(patch: Partial<ParanoidTasksSettings>): Promise<void> {
@@ -79,37 +105,45 @@ export default class ParanoidTasksPlugin extends Plugin {
 			// Skip the write when no task links to the renamed note.
 			const list = await readTasks(this.app);
 			if (serialize(rename(list)) === serialize(list)) return;
-			await updateTasks(this.app, this.settings.columns, rename);
+			await updateTasks(this.app, this.columnNames(), rename);
 		} catch (e) {
 			new Notice(`Paranoid Tasks: ${(e as Error).message}`);
 		}
 	}
 
+	/** Column names in board order; this is what lays out sections in the task file. */
+	columnNames(): string[] {
+		return this.settings.columns.map((c) => c.name);
+	}
+
 	async addColumn(rawName: string): Promise<void> {
 		const name = sanitize(rawName);
-		const columns = this.settings.columns;
-		assertValid(validateColumnName(name, columns, -1));
-		await this.applyColumns([...columns, name]);
+		assertValid(validateColumnName(name, this.columnNames(), -1));
+		await this.applyColumns([...this.settings.columns, newColumn(name)]);
 	}
 
 	async renameColumn(index: number, rawName: string): Promise<void> {
 		const name = sanitize(rawName);
-		const columns = this.settings.columns;
-		const oldName = columns[index];
+		const oldName = this.settings.columns[index].name;
 		if (name === oldName) return;
-		assertValid(validateColumnName(name, columns, index));
-		const next = columns.map((c, i) => (i === index ? name : c));
-		const collapsed = this.settings.collapsed.map((c) => (c === oldName ? name : c));
-		await this.applyColumns(next, (l) => renameSection(l, oldName, name), collapsed);
+		assertValid(validateColumnName(name, this.columnNames(), index));
+		const next = this.settings.columns.map((c, i) => (i === index ? { ...c, name } : c));
+		await this.applyColumns(next, (l) => renameSection(l, oldName, name));
 	}
 
 	/** Deletes a column, moving its tasks to the first remaining one (or a recreated Open). */
 	async deleteColumn(index: number): Promise<void> {
-		const columns = this.settings.columns;
-		const deleted = columns[index];
-		let next = columns.filter((_, i) => i !== index);
-		if (next.length === 0) next = [DEFAULT_COLUMN];
-		await this.applyColumns(next, (l) => mergeSection(l, deleted, next[0]));
+		const deleted = this.settings.columns[index].name;
+		let next = this.settings.columns.filter((_, i) => i !== index);
+		if (next.length === 0) next = [newColumn(DEFAULT_COLUMN)];
+		await this.applyColumns(next, (l) => mergeSection(l, deleted, next[0].name));
+	}
+
+	/** Changes per-column board options (not the name). */
+	async updateColumn(index: number, patch: Partial<Omit<ColumnConfig, "name">>): Promise<void> {
+		this.settings.columns = this.settings.columns.map((c, i) => (i === index ? { ...c, ...patch } : c));
+		await this.saveData(this.settings);
+		this.refreshBoards();
 	}
 
 	async moveColumn(index: number, delta: number): Promise<void> {
@@ -137,10 +171,8 @@ export default class ParanoidTasksPlugin extends Plugin {
 	}
 
 	async setCollapsed(column: string, collapsed: boolean): Promise<void> {
-		const others = this.settings.collapsed.filter((c) => c !== column);
-		this.settings.collapsed = collapsed ? [...others, column] : others;
-		await this.saveData(this.settings);
-		this.refreshBoards();
+		const index = this.settings.columns.findIndex((c) => c.name === column);
+		if (index !== -1) await this.updateColumn(index, { collapsed });
 	}
 
 	async addPriority(rawName: string): Promise<void> {
@@ -157,7 +189,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 		const oldName = priorities[index].name;
 		if (name === oldName) return;
 		assertValid(validatePriorityName(name, priorities.map((p) => p.name), index));
-		if (index > 0) await updateTasks(this.app, this.settings.columns, (l) => renamePriorityTags(l, oldName, name));
+		if (index > 0) await updateTasks(this.app, this.columnNames(), (l) => renamePriorityTags(l, oldName, name));
 		await this.savePriorities(priorities.map((p, i) => (i === index ? { ...p, name } : p)));
 	}
 
@@ -166,7 +198,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 		if (index === 0) return;
 		const priorities = this.settings.priorities;
 		const name = priorities[index].name;
-		await updateTasks(this.app, this.settings.columns, (l) => clearPriority(l, name));
+		await updateTasks(this.app, this.columnNames(), (l) => clearPriority(l, name));
 		await this.savePriorities(priorities.filter((_, i) => i !== index));
 	}
 
@@ -192,14 +224,13 @@ export default class ParanoidTasksPlugin extends Plugin {
 	}
 
 	/** Rewrites Main.md for the new columns, then saves settings and redraws boards. */
-	private async applyColumns(
-		columns: string[],
-		fn?: (list: TaskList) => TaskList,
-		collapsed = this.settings.collapsed,
-	): Promise<void> {
-		await updateTasks(this.app, columns, fn);
+	private async applyColumns(columns: ColumnConfig[], fn?: (list: TaskList) => TaskList): Promise<void> {
+		await updateTasks(
+			this.app,
+			columns.map((c) => c.name),
+			fn,
+		);
 		this.settings.columns = columns;
-		this.settings.collapsed = collapsed.filter((c) => columns.includes(c));
 		await this.saveData(this.settings);
 		this.refreshBoards();
 	}
@@ -212,26 +243,20 @@ export default class ParanoidTasksPlugin extends Plugin {
 
 	private async loadSettings(): Promise<void> {
 		const data = (await this.loadData()) as Partial<ParanoidTasksSettings> | null;
-		const columns: string[] = [];
-		for (const raw of Array.isArray(data?.columns) ? data.columns : DEFAULT_SETTINGS.columns) {
-			const name = typeof raw === "string" ? sanitize(raw) : "";
-			if (validateColumnName(name, columns, -1) === null) columns.push(name);
-		}
-		if (columns.length === 0) columns.push(DEFAULT_COLUMN);
-		const collapsed = Array.isArray(data?.collapsed)
-			? data.collapsed.filter((c): c is string => typeof c === "string" && columns.includes(c))
-			: [];
 		const folder = typeof data?.taskFolder === "string" ? toFolderPath(data.taskFolder) : DEFAULT_SETTINGS.taskFolder;
 		const file = (typeof data?.taskFile === "string" && toTaskFileName(data.taskFile)) || DEFAULT_SETTINGS.taskFile;
 		setTaskLocation(folder, file);
 		this.settings = {
 			taskFolder: folder,
 			taskFile: file,
-			columns,
-			collapsed,
+			boardName: (typeof data?.boardName === "string" && sanitize(data.boardName)) || DEFAULT_SETTINGS.boardName,
+			boardIcon:
+				typeof data?.boardIcon === "string" && isIconId(data.boardIcon) ? data.boardIcon : DEFAULT_SETTINGS.boardIcon,
+			columns: loadColumns(data),
 			columnDrag: loadBoolean(data?.columnDrag, DEFAULT_SETTINGS.columnDrag),
 			priorities: loadPriorities(data?.priorities),
 			detailsFromText: loadBoolean(data?.detailsFromText, DEFAULT_SETTINGS.detailsFromText),
+			detailsByDefault: loadBoolean(data?.detailsByDefault, DEFAULT_SETTINGS.detailsByDefault),
 			showDetailsIcon: loadBoolean(data?.showDetailsIcon, DEFAULT_SETTINGS.showDetailsIcon),
 		};
 	}
@@ -253,6 +278,12 @@ function assertValid(error: string | null): void {
 	if (error) throw new Error(error);
 }
 
+/** Whether `id` is a registered icon; Lucide icons may be given with or without the "lucide-" prefix. */
+export function isIconId(id: string): boolean {
+	const ids = getIconIds();
+	return ids.includes(id) || ids.includes(`lucide-${id}`);
+}
+
 /** Normalizes a vault folder path; "" (or "/") means the vault root. */
 function toFolderPath(raw: string): string {
 	const path = normalizePath(raw.trim());
@@ -266,6 +297,51 @@ function toTaskFileName(raw: string): string {
 
 function loadBoolean(value: unknown, fallback: boolean): boolean {
 	return typeof value === "boolean" ? value : fallback;
+}
+
+/** Settings written by versions before per-column options. */
+interface LegacyColumnSettings {
+	columns?: unknown;
+	collapsed?: unknown;
+	columnCollapse?: unknown;
+	showTaskCount?: unknown;
+}
+
+/**
+ * Validates columns from data.json, falling back to defaults. Also reads the old
+ * format (names + "collapsed" list + global collapse/count toggles).
+ */
+function loadColumns(data: LegacyColumnSettings | null): ColumnConfig[] {
+	const legacyCollapsed = Array.isArray(data?.collapsed) ? data.collapsed : [];
+	const legacyCollapsible = loadBoolean(data?.columnCollapse, true);
+	const legacyShowCount = loadBoolean(data?.showTaskCount, true);
+
+	const columns: ColumnConfig[] = [];
+	for (const raw of Array.isArray(data?.columns) ? data.columns : DEFAULT_SETTINGS.columns) {
+		let column: ColumnConfig;
+		if (typeof raw === "string") {
+			column = {
+				name: sanitize(raw),
+				collapsible: legacyCollapsible,
+				showCount: legacyShowCount,
+				collapsed: legacyCollapsed.includes(raw),
+			};
+		} else if (raw && typeof raw === "object") {
+			const c = raw as Partial<ColumnConfig>;
+			const defaults = newColumn("");
+			column = {
+				name: typeof c.name === "string" ? sanitize(c.name) : "",
+				collapsible: loadBoolean(c.collapsible, defaults.collapsible),
+				showCount: loadBoolean(c.showCount, defaults.showCount),
+				collapsed: loadBoolean(c.collapsed, defaults.collapsed),
+			};
+		} else {
+			continue;
+		}
+		const names = columns.map((x) => x.name);
+		if (validateColumnName(column.name, names, -1) === null) columns.push(column);
+	}
+	return columns.length > 0 ? columns : [newColumn(DEFAULT_COLUMN)];
 }
 
 /** Validates priorities from data.json, falling back to defaults. */

@@ -197,3 +197,31 @@
 	width: 100%;
 	resize: vertical;
 }
+
+.paranoid-icon-preview {
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+}
+
+.paranoid-icon-suggestion {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.paranoid-column-options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	margin-top: 6px;
+}
+
+.paranoid-column-option {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+}

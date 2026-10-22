@@ -1,6 +1,6 @@
 import { ItemView, Notice, setIcon, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
 import type ParanoidTasksPlugin from "./main";
-import type { Priority } from "./settings";
+import type { ColumnConfig, Priority } from "./settings";
 import {
 	addTask,
 	editTask,
@@ -48,11 +48,11 @@ export class BoardView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Task board";
+		return this.plugin.settings.boardName;
 	}
 
 	getIcon(): string {
-		return "layout-dashboard";
+		return this.plugin.settings.boardIcon;
 	}
 
 	async onOpen(): Promise<void> {
@@ -70,7 +70,7 @@ export class BoardView extends ItemView {
 		this.registerEvent(this.app.vault.on("rename", onNoteChange));
 
 		try {
-			await ensureTaskFile(this.app, this.plugin.settings.columns);
+			await ensureTaskFile(this.app, this.plugin.columnNames());
 		} catch (e) {
 			new Notice(`Paranoid Tasks: ${(e as Error).message}`);
 		}
@@ -91,7 +91,7 @@ export class BoardView extends ItemView {
 
 	private async mutate(fn: (list: TaskList) => TaskList): Promise<void> {
 		try {
-			await updateTasks(this.app, this.plugin.settings.columns, fn);
+			await updateTasks(this.app, this.plugin.columnNames(), fn);
 		} catch (e) {
 			new Notice(`Paranoid Tasks: ${(e as Error).message}`);
 		}
@@ -105,9 +105,12 @@ export class BoardView extends ItemView {
 
 		// Columns come from settings; Remove is only a drop zone.
 		this.plugin.settings.columns.forEach((column, index) => {
-			const columnEl = this.plugin.settings.collapsed.includes(column)
-				? this.renderCollapsedColumn(root, column, getItems(list, column))
-				: this.renderColumn(root, column, getItems(list, column));
+			// Collapsed state is kept while collapsing is off, so it comes back when re-enabled.
+			const items = getItems(list, column.name);
+			const columnEl =
+				column.collapsible && column.collapsed
+					? this.renderCollapsedColumn(root, column, items)
+					: this.renderColumn(root, column, items);
 			this.setupColumnDrag(columnEl, index);
 		});
 		this.renderRemoveZone(root);
@@ -128,7 +131,7 @@ export class BoardView extends ItemView {
 
 		handle.addEventListener("dragstart", (e) => {
 			this.draggedColumn = index;
-			e.dataTransfer?.setData("text/plain", this.plugin.settings.columns[index]);
+			e.dataTransfer?.setData("text/plain", this.plugin.settings.columns[index].name);
 			if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
 			column.addClass("is-dragging");
 		});
@@ -169,19 +172,24 @@ export class BoardView extends ItemView {
 			.forEach((el) => el.removeClasses(["is-drop-before", "is-drop-after"]));
 	}
 
-	private renderColumn(root: HTMLElement, section: string, items: string[]): HTMLElement {
+	private renderColumn(root: HTMLElement, config: ColumnConfig, items: string[]): HTMLElement {
+		const section = config.name;
 		const title = section;
 		const column = root.createDiv({ cls: "paranoid-column" });
 
 		const header = column.createDiv({ cls: "paranoid-column-header" });
-		const toggle = header.createDiv({
-			cls: "clickable-icon paranoid-collapse-toggle",
-			attr: { "aria-label": "Collapse column" },
-		});
-		setIcon(toggle, "chevron-down");
-		toggle.addEventListener("click", () => void this.plugin.setCollapsed(section, true));
+		if (config.collapsible) {
+			const toggle = header.createDiv({
+				cls: "clickable-icon paranoid-collapse-toggle",
+				attr: { "aria-label": "Collapse column" },
+			});
+			setIcon(toggle, "chevron-down");
+			toggle.addEventListener("click", () => void this.plugin.setCollapsed(section, true));
+		}
 		header.createSpan({ cls: "paranoid-column-title", text: title });
-		header.createSpan({ cls: "paranoid-column-count", text: String(items.length) });
+		if (config.showCount) {
+			header.createSpan({ cls: "paranoid-column-count", text: String(items.length) });
+		}
 		const addButton = header.createDiv({ cls: "clickable-icon paranoid-add", attr: { "aria-label": "Add task" } });
 		setIcon(addButton, "plus");
 		addButton.addEventListener("click", () => {
@@ -210,14 +218,17 @@ export class BoardView extends ItemView {
 	}
 
 	/** Narrow vertical strip with the title; click expands, dropping a card appends it to the column. */
-	private renderCollapsedColumn(root: HTMLElement, section: string, items: string[]): HTMLElement {
+	private renderCollapsedColumn(root: HTMLElement, config: ColumnConfig, items: string[]): HTMLElement {
+		const section = config.name;
 		const column = root.createDiv({
 			cls: "paranoid-column is-collapsed",
 			attr: { "aria-label": `Expand ${section}` },
 		});
 		setIcon(column.createDiv({ cls: "paranoid-collapse-toggle" }), "chevron-right");
 		column.createDiv({ cls: "paranoid-column-title", text: section });
-		column.createDiv({ cls: "paranoid-column-count", text: String(items.length) });
+		if (config.showCount) {
+			column.createDiv({ cls: "paranoid-column-count", text: String(items.length) });
+		}
 		column.addEventListener("click", () => void this.plugin.setCollapsed(section, false));
 
 		column.addEventListener("dragover", (e) => {
@@ -308,6 +319,8 @@ export class BoardView extends ItemView {
 			initialDetails: task.details,
 			detailsExists: task.details !== null && resolveDetails(this.app, task.details) !== null,
 			detailsFromText: this.plugin.settings.detailsFromText,
+			// raw is "" only for a new task.
+			startWithDetails: raw === "" && this.plugin.settings.detailsByDefault,
 			onSubmit: (result, open) => this.saveTask(task.details, result, open, apply),
 		}).open();
 	}
@@ -323,11 +336,13 @@ export class BoardView extends ItemView {
 		open: boolean,
 		apply: (list: TaskList, line: string) => TaskList,
 	): Promise<void> {
-		const { columns, priorities, detailsFromText } = this.plugin.settings;
+		const { priorities, detailsFromText } = this.plugin.settings;
+		const columns = this.plugin.columnNames();
 		const priority = sameTitle(result.priority, priorities[0].name) ? null : result.priority;
 		const write = (details: string | null) =>
 			updateTasks(this.app, columns, (l) => apply(l, formatTask({ priority, details, text: result.text })));
-		const name = toFileName(detailsFromText ? result.text : result.details.name);
+		// An empty name field means "same as the task text".
+		const name = toFileName(detailsFromText || !result.details.name ? result.text : result.details.name);
 		const oldFile = oldDetails ? resolveDetails(this.app, oldDetails) : null;
 		let details: string | null = null;
 
