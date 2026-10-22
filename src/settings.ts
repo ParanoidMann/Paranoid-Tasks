@@ -68,6 +68,8 @@ export interface ParanoidTasksSettings {
 	showDetailsIcon: boolean;
 	/** New tasks start with "Add details" already pressed. */
 	detailsByDefault: boolean;
+	/** Keep the details note when its task is deleted (otherwise it goes to trash). */
+	keepDetailsOnDelete: boolean;
 	/** Show the deadline under the task text on cards. */
 	deadlineShow: boolean;
 	/** Raise the priority of default-priority tasks as their deadline approaches (rewrites the task file). */
@@ -94,6 +96,7 @@ export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
 	detailsFromText: false,
 	showDetailsIcon: true,
 	detailsByDefault: false,
+	keepDetailsOnDelete: false,
 	deadlineShow: true,
 	deadlineEscalate: false,
 	deadlineDays: 3,
@@ -352,6 +355,17 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.detailsByDefault)
 					.onChange(
 						(value) => void this.run(() => this.plugin.updateSettings({ detailsByDefault: value }), false),
+					),
+			);
+
+		new Setting(containerEl)
+			.setName(t("settings.keepDetailsOnDelete"))
+			.setDesc(t("settings.keepDetailsOnDeleteDesc"))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.keepDetailsOnDelete)
+					.onChange(
+						(value) => void this.run(() => this.plugin.updateSettings({ keepDetailsOnDelete: value }), false),
 					),
 			);
 

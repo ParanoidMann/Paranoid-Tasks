@@ -317,6 +317,24 @@ export function editTask(
 	return result;
 }
 
+/** Removes all tasks from a section (the section itself stays). */
+export function clearSection(list: TaskList, section: string): TaskList {
+	const result = clone(list);
+	const target = findSection(result, section);
+	if (target) target.items = [];
+	return result;
+}
+
+/** Removes a task line from the list entirely. */
+export function deleteTask(list: TaskList, section: string, index: number, text: string): TaskList {
+	const result = clone(list);
+	const items = findSection(result, section)?.items;
+	const i = items ? locate(items, index, text) : -1;
+	if (!items || i === -1) return list;
+	items.splice(i, 1);
+	return result;
+}
+
 /**
  * Moves a task. `toIndex` is the insertion position in the target section as
  * it was displayed before the move (i.e. still containing the dragged task).

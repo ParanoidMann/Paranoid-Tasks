@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
 	addTask,
+	clearSection,
 	daysUntil,
+	deleteTask,
 	clearPriority,
 	editTask,
 	emptyList,
@@ -310,5 +312,26 @@ describe("deadlines", () => {
 			"no deadline",
 		]);
 		expect(getItems(result, "Remove")).toEqual(["[Deadline: 2026-10-23] removed"]);
+	});
+});
+
+describe("deleteTask", () => {
+	const list = parse(sample);
+
+	it("deletes by index and falls back to text lookup", () => {
+		expect(getItems(deleteTask(list, "Open", 1, "b"), "Open")).toEqual(["a", "c"]);
+		expect(getItems(deleteTask(list, "Open", 0, "c"), "Open")).toEqual(["a", "b"]);
+	});
+
+	it("leaves the list unchanged when the task is gone", () => {
+		expect(deleteTask(list, "Open", 0, "missing")).toBe(list);
+		expect(deleteTask(list, "Nope", 0, "a")).toBe(list);
+	});
+});
+
+describe("clearSection", () => {
+	it("empties one section and keeps the others", () => {
+		const result = clearSection(parse(sample), "Remove");
+		expect(items(result)).toEqual({ Open: ["a", "b", "c"], Done: ["d"], Remove: [] });
 	});
 });

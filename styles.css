@@ -254,3 +254,27 @@
 .paranoid-number-input {
 	width: 5em;
 }
+
+.paranoid-removed-column {
+	border: 2px dashed var(--background-modifier-border);
+	background-color: transparent;
+}
+
+.paranoid-modal-footer {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 12px;
+}
+
+.paranoid-modal-footer-right {
+	display: flex;
+	gap: 8px;
+}
+
+.paranoid-clear {
+	margin-left: auto;
+	padding: 2px 8px;
+	height: auto;
+	font-size: var(--font-ui-smaller);
+}

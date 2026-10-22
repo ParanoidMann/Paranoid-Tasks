@@ -333,6 +333,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 			priorities: loadPriorities(data?.priorities),
 			detailsFromText: loadBoolean(data?.detailsFromText, DEFAULT_SETTINGS.detailsFromText),
 			detailsByDefault: loadBoolean(data?.detailsByDefault, DEFAULT_SETTINGS.detailsByDefault),
+			keepDetailsOnDelete: loadBoolean(data?.keepDetailsOnDelete, DEFAULT_SETTINGS.keepDetailsOnDelete),
 			deadlineShow: loadBoolean(data?.deadlineShow, DEFAULT_SETTINGS.deadlineShow),
 			deadlineEscalate: loadBoolean(data?.deadlineEscalate, DEFAULT_SETTINGS.deadlineEscalate),
 			deadlineDays:

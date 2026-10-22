@@ -12,11 +12,14 @@ import {
 	REMOVE_SECTION,
 	sameTitle,
 	TaskList,
+	clearSection,
 	daysUntil,
+	deleteTask as deleteTaskLine,
 	toFileName,
 	toISODate,
 } from "./tasks";
 import { ensureTaskFile, readTasks, taskFilePath, updateTasks } from "./taskStore";
+import { ConfirmModal } from "./ConfirmModal";
 import { TaskModal, TaskModalResult } from "./TaskModal";
 import {
 	checkDetailsName,
@@ -28,6 +31,19 @@ import {
 } from "./details";
 
 export const VIEW_TYPE_BOARD = "paranoid-tasks-board";
+
+/** How a column of cards is drawn. */
+interface ColumnView {
+	/** Section in the task file. */
+	section: string;
+	/** Label in the header (differs from the section only for Remove). */
+	title: string;
+	collapsible: boolean;
+	showCount: boolean;
+	canAdd: boolean;
+	/** Shows a "Clear" button in the header that calls this. */
+	onClear?: () => void;
+}
 
 interface DragState {
 	section: string;
@@ -41,6 +57,9 @@ export class BoardView extends ItemView {
 	private draggedColumn: number | null = null;
 	private dropIndicator: HTMLElement | null = null;
 	private renderToken = 0;
+	/** Show the Remove section as a column (toggled from the view header; not saved). */
+	private showRemoved = false;
+	private removedAction: HTMLElement | null = null;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: ParanoidTasksPlugin) {
 		super(leaf);
@@ -51,7 +70,7 @@ export class BoardView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return this.plugin.settings.boardName;
+		return this.plugin.boardTitle();
 	}
 
 	getIcon(): string {
@@ -59,6 +78,10 @@ export class BoardView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
+		this.removedAction = this.addAction("archive", t("board.showRemoved"), () => {
+			this.showRemoved = !this.showRemoved;
+			void this.refresh();
+		});
 		// Main.md content changes redraw the board; any note appearing, disappearing or
 		// being renamed may change whether a details link resolves.
 		const onMainChange = (file: TAbstractFile) => {
@@ -106,18 +129,39 @@ export class BoardView extends ItemView {
 		root.addClass("paranoid-board");
 		this.dropIndicator = null;
 
-		// Columns come from settings; Remove is only a drop zone.
+		// Columns come from settings; Remove is a drop zone unless shown as a column.
 		this.plugin.settings.columns.forEach((column, index) => {
 			// Collapsed state is kept while collapsing is off, so it comes back when re-enabled.
 			const items = getItems(list, column.name);
 			const columnEl =
 				column.collapsible && column.collapsed
 					? this.renderCollapsedColumn(root, column, items)
-					: this.renderColumn(root, column, items);
+					: this.renderColumn(root, items, {
+							section: column.name,
+							title: column.name,
+							collapsible: column.collapsible,
+							showCount: column.showCount,
+							canAdd: true,
+						});
 			this.setupColumnDrag(columnEl, index);
 		});
+
+		this.removedAction?.setAttr("aria-label", t(this.showRemoved ? "board.hideRemoved" : "board.showRemoved"));
+		this.removedAction?.toggleClass("is-active", this.showRemoved);
 		const { removeZone } = this.plugin.settings;
-		if (removeZone !== "never") this.renderRemoveZone(root, removeZone === "drag");
+		if (this.showRemoved) {
+			const column = this.renderColumn(root, getItems(list, REMOVE_SECTION), {
+				section: REMOVE_SECTION,
+				title: t("board.removeTitle"),
+				collapsible: false,
+				showCount: true,
+				canAdd: false,
+				onClear: () => this.confirmClearRemoved(list),
+			});
+			column.addClass("paranoid-removed-column");
+		} else if (removeZone !== "never") {
+			this.renderRemoveZone(root, removeZone === "drag");
+		}
 	}
 
 	/**
@@ -176,13 +220,12 @@ export class BoardView extends ItemView {
 			.forEach((el) => el.removeClasses(["is-drop-before", "is-drop-after"]));
 	}
 
-	private renderColumn(root: HTMLElement, config: ColumnConfig, items: string[]): HTMLElement {
-		const section = config.name;
-		const title = section;
+	private renderColumn(root: HTMLElement, items: string[], view: ColumnView): HTMLElement {
+		const { section, title } = view;
 		const column = root.createDiv({ cls: "paranoid-column" });
 
 		const header = column.createDiv({ cls: "paranoid-column-header" });
-		if (config.collapsible) {
+		if (view.collapsible) {
 			const toggle = header.createDiv({
 				cls: "clickable-icon paranoid-collapse-toggle",
 				attr: { "aria-label": t("board.collapseColumn") },
@@ -191,14 +234,25 @@ export class BoardView extends ItemView {
 			toggle.addEventListener("click", () => void this.plugin.setCollapsed(section, true));
 		}
 		header.createSpan({ cls: "paranoid-column-title", text: title });
-		if (config.showCount) {
+		if (view.showCount) {
 			header.createSpan({ cls: "paranoid-column-count", text: String(items.length) });
 		}
-		const addButton = header.createDiv({ cls: "clickable-icon paranoid-add", attr: { "aria-label": t("board.addTask") } });
-		setIcon(addButton, "plus");
-		addButton.addEventListener("click", () => {
-			this.openTaskModal(t("board.newTaskTitle", { column: title }), "", (l, line) => addTask(l, section, line));
-		});
+		if (view.onClear) {
+			const onClear = view.onClear;
+			const clear = header.createEl("button", { cls: "paranoid-clear", text: t("board.clear") });
+			clear.disabled = items.length === 0;
+			clear.addEventListener("click", () => onClear());
+		}
+		if (view.canAdd) {
+			const addButton = header.createDiv({
+				cls: "clickable-icon paranoid-add",
+				attr: { "aria-label": t("board.addTask") },
+			});
+			setIcon(addButton, "plus");
+			addButton.addEventListener("click", () => {
+				this.openTaskModal(t("board.newTaskTitle", { column: title }), "", (l, line) => addTask(l, section, line));
+			});
+		}
 
 		const cardList = column.createDiv({ cls: "paranoid-cards" });
 		items.forEach((text, index) => this.renderCard(cardList, section, index, text));
@@ -297,7 +351,12 @@ export class BoardView extends ItemView {
 		}
 
 		card.addEventListener("click", () => {
-			this.openTaskModal(t("board.editTaskTitle"), text, (l, line) => editTask(l, section, index, text, line));
+			this.openTaskModal(
+				t("board.editTaskTitle"),
+				text,
+				(l, line) => editTask(l, section, index, text, line),
+				() => this.deleteTask(section, index, text),
+			);
 		});
 		card.addEventListener("dragstart", (e) => {
 			this.dragged = { section, index, text };
@@ -326,9 +385,16 @@ export class BoardView extends ItemView {
 	 * Opens the task modal for a raw line ("" for a new task) and applies
 	 * `apply(list, newLine)` on save. The default priority is written without a tag.
 	 */
-	private openTaskModal(title: string, raw: string, apply: (list: TaskList, line: string) => TaskList): void {
+	private openTaskModal(
+		title: string,
+		raw: string,
+		apply: (list: TaskList, line: string) => TaskList,
+		remove?: () => Promise<void>,
+	): void {
 		const task = parseTask(raw);
 		const priorities = this.plugin.settings.priorities;
+		const detailsFile = task.details ? resolveDetails(this.app, task.details) : null;
+		const trashesDetails = detailsFile !== null && !this.plugin.settings.keepDetailsOnDelete;
 		new TaskModal(this.app, {
 			title,
 			initialText: task.text,
@@ -336,12 +402,51 @@ export class BoardView extends ItemView {
 			initialPriority: this.findPriority(task.priority)?.name ?? task.priority ?? priorities[0].name,
 			initialDeadline: task.deadline,
 			initialDetails: task.details,
-			detailsExists: task.details !== null && resolveDetails(this.app, task.details) !== null,
+			detailsExists: detailsFile !== null,
 			detailsFromText: this.plugin.settings.detailsFromText,
 			// raw is "" only for a new task.
 			startWithDetails: raw === "" && this.plugin.settings.detailsByDefault,
 			onSubmit: (result, open) => this.saveTask(task.details, result, open, apply),
+			onDelete: remove,
+			deleteNote: trashesDetails ? t("modal.deleteTaskDetails", { name: task.details ?? "" }) : undefined,
 		}).open();
+	}
+
+	/** Deletes the task line, then trashes its details note unless the user keeps them. */
+	/** Asks, then deletes every task in Remove (and their details notes, like single deletion). */
+	private confirmClearRemoved(list: TaskList): void {
+		const items = getItems(list, REMOVE_SECTION);
+		const keep = this.plugin.settings.keepDetailsOnDelete;
+		const files = keep
+			? []
+			: items.flatMap((raw) => {
+					const { details } = parseTask(raw);
+					const file = details ? resolveDetails(this.app, details) : null;
+					return file ? [file] : [];
+				});
+		const message = t("board.clearMessage", { count: items.length });
+		new ConfirmModal(this.app, {
+			title: t("board.clearTitle"),
+			message: files.length > 0 ? `${message} ${t("board.clearDetails", { count: files.length })}` : message,
+			confirmText: t("board.clear"),
+			onConfirm: () => {
+				void (async () => {
+					try {
+						await updateTasks(this.app, this.plugin.columnNames(), (l) => clearSection(l, REMOVE_SECTION));
+						for (const file of files) await trashDetails(this.app, file);
+					} catch (e) {
+						new Notice(t("notice.error", { message: (e as Error).message }));
+					}
+				})();
+			},
+		}).open();
+	}
+
+	private async deleteTask(section: string, index: number, raw: string): Promise<void> {
+		const { details } = parseTask(raw);
+		const file = details ? resolveDetails(this.app, details) : null;
+		await updateTasks(this.app, this.plugin.columnNames(), (l) => deleteTaskLine(l, section, index, raw));
+		if (file && !this.plugin.settings.keepDetailsOnDelete) await trashDetails(this.app, file);
 	}
 
 	/**

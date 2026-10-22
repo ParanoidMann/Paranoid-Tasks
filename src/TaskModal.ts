@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting, TextComponent } from "obsidian";
+import { App, ButtonComponent, Modal, Notice, Setting, TextComponent } from "obsidian";
 import { ConfirmModal } from "./ConfirmModal";
 import { t } from "./i18n";
 import { isValidDate, sanitize } from "./tasks";
@@ -42,6 +42,13 @@ export interface TaskModalOptions {
 	 * Throwing keeps the modal open and shows the error.
 	 */
 	onSubmit: (result: TaskModalResult, open: boolean) => Promise<void>;
+	/**
+	 * Deletes the task (only for existing tasks; no Delete button otherwise).
+	 * Throwing keeps the modal open and shows the error.
+	 */
+	onDelete?: () => Promise<void>;
+	/** Extra line for the delete confirmation, e.g. that the details note goes to trash. */
+	deleteNote?: string;
 }
 
 /** Details state while the modal is open; changes are applied only on save. */
@@ -105,9 +112,21 @@ export class TaskModal extends Modal {
 			}
 		});
 
-		new Setting(this.contentEl)
-			.addButton((b) => b.setButtonText(t("common.save")).setCta().onClick(() => void this.submit(false)))
-			.addButton((b) => b.setButtonText(t("common.cancel")).onClick(() => this.close()));
+		// Footer: Delete on the left (existing tasks only), Save/Cancel on the right.
+		const footer = this.contentEl.createDiv({ cls: "paranoid-modal-footer" });
+		const left = footer.createDiv();
+		const right = footer.createDiv({ cls: "paranoid-modal-footer-right" });
+		const { onDelete } = this.options;
+		if (onDelete) {
+			new ButtonComponent(left)
+				.setButtonText(t("common.delete"))
+				.onClick(() => this.confirmDelete(onDelete));
+		}
+		new ButtonComponent(right)
+			.setButtonText(t("common.save"))
+			.setCta()
+			.onClick(() => void this.submit(false));
+		new ButtonComponent(right).setButtonText(t("common.cancel")).onClick(() => this.close());
 
 		this.renderDetails();
 		this.input.focus();
@@ -169,7 +188,6 @@ export class TaskModal extends Modal {
 		setting.addButton((b) =>
 			b
 				.setButtonText(t("common.delete"))
-				.setWarning()
 				.onClick(() => {
 					if (!existing || missing) {
 						// Nothing on disk yet (or already gone): no need to confirm.
@@ -188,6 +206,25 @@ export class TaskModal extends Modal {
 					}).open();
 				}),
 		);
+	}
+
+	private confirmDelete(onDelete: () => Promise<void>): void {
+		const { deleteNote } = this.options;
+		new ConfirmModal(this.app, {
+			title: t("modal.deleteTaskTitle"),
+			message: deleteNote ? `${t("modal.deleteTaskMessage")} ${deleteNote}` : t("modal.deleteTaskMessage"),
+			confirmText: t("common.delete"),
+			onConfirm: () => {
+				void (async () => {
+					try {
+						await onDelete();
+						this.close();
+					} catch (e) {
+						new Notice((e as Error).message);
+					}
+				})();
+			},
+		}).open();
 	}
 
 	private detailsAction(): DetailsAction {

@@ -18,7 +18,13 @@
 	"board.detailsMissing": "Заметка с деталями не найдена: {name}",
 	"board.openDetails": "Открыть «{name}»",
 	"board.removeTitle": "Удалить",
-	"board.dropToRemove": "Перетащите сюда, чтобы убрать",
+	"board.dropToRemove": "Перетащите сюда, чтобы безопасно убрать",
+	"board.showRemoved": "Показать убранные задачи",
+	"board.hideRemoved": "Скрыть убранные задачи",
+	"board.clear": "Очистить",
+	"board.clearTitle": "Очистить убранные задачи?",
+	"board.clearMessage": "Все убранные задачи ({count}) будут удалены из файла задач.",
+	"board.clearDetails": "Их заметки с деталями ({count}) будут перемещены в корзину.",
 	"board.newTaskTitle": "Новая задача в «{column}»",
 	"board.editTaskTitle": "Редактирование задачи",
 	"board.deadline": "Срок: {date}",
@@ -36,6 +42,9 @@
 	"modal.emptyText": "Текст задачи пуст",
 	"modal.deleteDetailsTitle": "Удалить детали?",
 	"modal.deleteDetailsMessage": "Заметка «{name}» будет перемещена в корзину при сохранении задачи.",
+	"modal.deleteTaskTitle": "Удалить задачу?",
+	"modal.deleteTaskMessage": "Задача будет удалена из файла задач.",
+	"modal.deleteTaskDetails": "Заметка с деталями «{name}» будет перемещена в корзину.",
 
 	"error.columnNameEmpty": "Название столбца пустое",
 	"error.columnExists": "Столбец «{name}» уже существует",
@@ -118,6 +127,8 @@
 	"settings.detailsFromTextDesc": "Вкл.: заметка называется как задача; правка текста переименовывает заметку, а переименование заметки меняет текст. Выкл.: название заметки задаётся отдельно в окне задачи.",
 	"settings.detailsByDefault": "Создавать детали по умолчанию",
 	"settings.detailsByDefaultDesc": "У новых задач детали уже добавлены; их можно убрать в окне задачи до сохранения.",
+	"settings.keepDetailsOnDelete": "Не удалять детали при удалении задачи",
+	"settings.keepDetailsOnDeleteDesc": "Если выключено, при удалении задачи её заметка с деталями тоже перемещается в корзину.",
 	"settings.showDetailsIcon": "Иконка деталей на карточках",
 	"settings.showDetailsIconDesc": "Клик по иконке открывает заметку с деталями."
 }

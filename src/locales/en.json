@@ -18,7 +18,13 @@
 	"board.detailsMissing": "Details note not found: {name}",
 	"board.openDetails": "Open {name}",
 	"board.removeTitle": "Remove",
-	"board.dropToRemove": "Drop here to remove",
+	"board.dropToRemove": "Drop here to safely remove",
+	"board.showRemoved": "Show removed tasks",
+	"board.hideRemoved": "Hide removed tasks",
+	"board.clear": "Clear",
+	"board.clearTitle": "Clear removed tasks?",
+	"board.clearMessage": "All {count} removed tasks will be deleted from the task file.",
+	"board.clearDetails": "Their details notes ({count}) will be moved to trash.",
 	"board.newTaskTitle": "New task in {column}",
 	"board.editTaskTitle": "Edit task",
 	"board.deadline": "Due {date}",
@@ -36,6 +42,9 @@
 	"modal.emptyText": "Task text is empty",
 	"modal.deleteDetailsTitle": "Delete details?",
 	"modal.deleteDetailsMessage": "The note \"{name}\" will be moved to trash when you save the task.",
+	"modal.deleteTaskTitle": "Delete task?",
+	"modal.deleteTaskMessage": "The task will be deleted from the task file.",
+	"modal.deleteTaskDetails": "Its details note \"{name}\" will be moved to trash.",
 
 	"error.columnNameEmpty": "Column name is empty",
 	"error.columnExists": "Column \"{name}\" already exists",
@@ -118,6 +127,8 @@
 	"settings.detailsFromTextDesc": "On: the note is named after the task text; editing the text renames the note and renaming the note changes the text. Off: the note name is set separately in the task dialog.",
 	"settings.detailsByDefault": "Create details by default",
 	"settings.detailsByDefaultDesc": "New tasks start with details added; you can still remove them in the task dialog before saving.",
+	"settings.keepDetailsOnDelete": "Keep details when deleting a task",
+	"settings.keepDetailsOnDeleteDesc": "When off, deleting a task also moves its details note to trash.",
 	"settings.showDetailsIcon": "Show details icon on cards",
 	"settings.showDetailsIconDesc": "Clicking the icon opens the details note."
 }
