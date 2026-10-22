@@ -74,16 +74,21 @@ export class TaskModal extends Modal {
 
 	onOpen(): void {
 		this.titleEl.setText(this.options.title);
+		this.modalEl.addClass("paranoid-task-modal");
+		// Compact label/control rows (styled in styles.css), then the task text below.
+		const fields = this.contentEl.createDiv({ cls: "paranoid-task-fields" });
+		// Details first, then priority and deadline.
+		this.detailsEl = fields.createDiv();
 
 		// Keep a priority that is not in settings (e.g. typed into Main.md by hand) so saving does not drop it.
 		const names = [...this.options.priorities];
 		if (!names.includes(this.priority)) names.push(this.priority);
-		new Setting(this.contentEl).setName(t("modal.priority")).addDropdown((dropdown) => {
+		new Setting(fields).setName(t("modal.priority")).addDropdown((dropdown) => {
 			for (const name of names) dropdown.addOption(name, name);
 			dropdown.setValue(this.priority).onChange((value) => (this.priority = value));
 		});
 
-		new Setting(this.contentEl)
+		new Setting(fields)
 			.setName(t("modal.deadline"))
 			.addText((text) => {
 				text.inputEl.type = "date";
@@ -100,9 +105,10 @@ export class TaskModal extends Modal {
 					}),
 			);
 
-		this.detailsEl = this.contentEl.createDiv();
-
+		const label = this.contentEl.createEl("label", { cls: "paranoid-modal-label", text: t("modal.text") });
 		this.input = this.contentEl.createEl("textarea", { cls: "paranoid-modal-input" });
+		this.input.id = "paranoid-task-text";
+		label.htmlFor = this.input.id;
 		this.input.rows = 4;
 		this.input.value = this.options.initialText;
 		this.input.addEventListener("keydown", (e) => {
@@ -166,9 +172,10 @@ export class TaskModal extends Modal {
 		const missing = existing && !detailsExists;
 		if (detailsFromText) {
 			const name = initialDetails ?? "";
-			setting.setDesc(existing ? (missing ? t("modal.detailsMissing", { name }) : name) : t("modal.detailsFromText"));
+			const text = existing ? (missing ? t("modal.detailsMissing", { name }) : name) : t("modal.detailsFromText");
+			setting.controlEl.createSpan({ cls: "paranoid-details-name", text });
 		} else {
-			if (missing) setting.setDesc(t("modal.noteNotFound"));
+			if (missing) setting.controlEl.createSpan({ cls: "paranoid-details-name", text: t("modal.noteNotFound") });
 			setting.addText((text) =>
 				text
 					.setPlaceholder(existing ? t("modal.notePlaceholder") : t("modal.sameAsText"))

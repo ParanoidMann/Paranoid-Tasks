@@ -278,3 +278,41 @@
 	height: auto;
 	font-size: var(--font-ui-smaller);
 }
+
+/* Task dialog: a separator under the title, then compact "label — control" rows without separators. */
+.paranoid-task-fields {
+	border-top: var(--border-width) solid var(--background-modifier-border);
+	padding-top: 8px;
+}
+
+/* Obsidian draws a top border on every modal setting row except the first (.modal:not(.mod-settings) ...),
+   so this selector has to be at least as specific. */
+.modal.paranoid-task-modal .paranoid-task-fields .setting-item:not(.setting-item-heading) {
+	border-top: none;
+	padding: 6px 0;
+}
+
+.paranoid-task-fields .setting-item-info {
+	flex: 0 0 110px;
+	margin-right: 12px;
+}
+
+.paranoid-task-fields .setting-item-control {
+	flex: 1 1 auto;
+	justify-content: flex-end;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.paranoid-details-name {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.paranoid-modal-label {
+	display: block;
+	margin-top: 16px;
+	margin-bottom: 6px;
+	color: var(--text-normal);
+	font-size: var(--font-ui-medium);
+}

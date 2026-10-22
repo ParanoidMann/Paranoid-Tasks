@@ -30,6 +30,7 @@
 	"board.deadline": "Due {date}",
 
 	"modal.priority": "Priority",
+	"modal.text": "Task text",
 	"modal.deadline": "Deadline",
 	"modal.clearDeadline": "Clear deadline",
 	"modal.details": "Details",

@@ -30,6 +30,7 @@
 	"board.deadline": "Срок: {date}",
 
 	"modal.priority": "Приоритет",
+	"modal.text": "Текст задачи",
 	"modal.deadline": "Дедлайн",
 	"modal.clearDeadline": "Убрать дедлайн",
 	"modal.details": "Детали",
