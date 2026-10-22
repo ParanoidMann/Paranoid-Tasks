@@ -99,12 +99,66 @@ export function sanitize(text: string): string {
 	return text.replace(/\s+/g, " ").trim();
 }
 
+/** Common name check: non-empty and unique (case-insensitive) except for the item at `index`. */
+function validateName(kind: string, name: string, names: string[], index: number): string | null {
+	if (!name) return `${kind} name is empty`;
+	if (names.some((n, i) => i !== index && sameTitle(n, name))) return `${kind} "${name}" already exists`;
+	return null;
+}
+
 /** Returns an error message, or null if `name` is a valid new name for column `index` (-1 for a new column). */
 export function validateColumnName(name: string, columns: string[], index: number): string | null {
-	if (!name) return "Column name is empty";
 	if (sameTitle(name, REMOVE_SECTION)) return `"${REMOVE_SECTION}" is reserved`;
-	if (columns.some((c, i) => i !== index && sameTitle(c, name))) return `Column "${name}" already exists`;
-	return null;
+	return validateName("Column", name, columns, index);
+}
+
+/** Returns an error message, or null if `name` is a valid new name for priority `index` (-1 for a new one). */
+export function validatePriorityName(name: string, priorities: string[], index: number): string | null {
+	if (/[[\]]/.test(name)) return "Priority name cannot contain brackets";
+	return validateName("Priority", name, priorities, index);
+}
+
+const PRIORITY_TAG = /^\[Priority:\s*([^\]]+?)\s*\]\s*/i;
+
+export interface ParsedTask {
+	/** Priority from the tag, or null if the line has no tag. */
+	priority: string | null;
+	text: string;
+}
+
+/** Splits a task line into the `[Priority: X]` tag and the text. */
+export function parseTask(raw: string): ParsedTask {
+	const match = PRIORITY_TAG.exec(raw);
+	if (!match) return { priority: null, text: raw };
+	return { priority: match[1], text: raw.slice(match[0].length) };
+}
+
+/** Builds a task line; a null priority means no tag. */
+export function formatTask(priority: string | null, text: string): string {
+	return priority ? `[Priority: ${priority}] ${text}` : text;
+}
+
+function mapItems(list: TaskList, fn: (raw: string) => string): TaskList {
+	return {
+		preamble: list.preamble,
+		sections: list.sections.map((s) => ({ title: s.title, items: s.items.map(fn) })),
+	};
+}
+
+/** Replaces the `oldName` tag with `newName` in all sections. */
+export function renamePriority(list: TaskList, oldName: string, newName: string): TaskList {
+	return mapItems(list, (raw) => {
+		const task = parseTask(raw);
+		return task.priority && sameTitle(task.priority, oldName) ? formatTask(newName, task.text) : raw;
+	});
+}
+
+/** Removes the `name` tag in all sections, making those tasks default priority. */
+export function clearPriority(list: TaskList, name: string): TaskList {
+	return mapItems(list, (raw) => {
+		const task = parseTask(raw);
+		return task.priority && sameTitle(task.priority, name) ? task.text : raw;
+	});
 }
 
 function clone(list: TaskList): TaskList {

@@ -4,18 +4,31 @@ import { sanitize } from "./tasks";
 export interface TaskModalOptions {
 	title: string;
 	initialText: string;
-	onSubmit: (text: string) => void;
+	/** Priority names for the dropdown, in display order. */
+	priorities: string[];
+	initialPriority: string;
+	onSubmit: (text: string, priority: string) => void;
 }
 
 export class TaskModal extends Modal {
 	private input!: HTMLTextAreaElement;
+	private priority: string;
 
 	constructor(app: App, private options: TaskModalOptions) {
 		super(app);
+		this.priority = options.initialPriority;
 	}
 
 	onOpen(): void {
 		this.titleEl.setText(this.options.title);
+
+		// Keep a priority that is not in settings (e.g. typed into Main.md by hand) so saving does not drop it.
+		const names = [...this.options.priorities];
+		if (!names.includes(this.priority)) names.push(this.priority);
+		new Setting(this.contentEl).setName("Priority").addDropdown((dropdown) => {
+			for (const name of names) dropdown.addOption(name, name);
+			dropdown.setValue(this.priority).onChange((value) => (this.priority = value));
+		});
 
 		this.input = this.contentEl.createEl("textarea", { cls: "paranoid-modal-input" });
 		this.input.rows = 4;
@@ -46,6 +59,6 @@ export class TaskModal extends Modal {
 			return;
 		}
 		this.close();
-		this.options.onSubmit(text);
+		this.options.onSubmit(text, this.priority);
 	}
 }

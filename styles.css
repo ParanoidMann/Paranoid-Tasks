@@ -77,8 +77,28 @@
 	background-color: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	cursor: grab;
+	display: flex;
+	gap: 6px;
+	align-items: baseline;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
+}
+
+.paranoid-priority {
+	flex: none;
+}
+
+.paranoid-priority.is-unknown {
+	color: var(--text-faint);
+}
+
+.paranoid-card-text {
+	min-width: 0;
+}
+
+.paranoid-symbol-input {
+	width: 4em;
+	text-align: center;
 }
 
 .paranoid-card:hover {

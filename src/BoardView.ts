@@ -1,6 +1,17 @@
 import { ItemView, Notice, setIcon, TAbstractFile, WorkspaceLeaf } from "obsidian";
 import type ParanoidTasksPlugin from "./main";
-import { addTask, editTask, getItems, moveTask, REMOVE_SECTION, TaskList } from "./tasks";
+import type { Priority } from "./settings";
+import {
+	addTask,
+	editTask,
+	formatTask,
+	getItems,
+	moveTask,
+	parseTask,
+	REMOVE_SECTION,
+	sameTitle,
+	TaskList,
+} from "./tasks";
 import { ensureTaskFile, readTasks, TASK_FILE_PATH, updateTasks } from "./taskStore";
 import { TaskModal } from "./TaskModal";
 
@@ -101,11 +112,7 @@ export class BoardView extends ItemView {
 		const addButton = header.createDiv({ cls: "clickable-icon paranoid-add", attr: { "aria-label": "Add task" } });
 		setIcon(addButton, "plus");
 		addButton.addEventListener("click", () => {
-			new TaskModal(this.app, {
-				title: `New task in ${title}`,
-				initialText: "",
-				onSubmit: (text) => void this.mutate((l) => addTask(l, section, text)),
-			}).open();
+			this.openTaskModal(`New task in ${title}`, "", (l, line) => addTask(l, section, line));
 		});
 
 		const cardList = column.createDiv({ cls: "paranoid-cards" });
@@ -155,16 +162,28 @@ export class BoardView extends ItemView {
 		});
 	}
 
+	/** `text` is the raw line from Main.md, including the priority tag. */
 	private renderCard(cardList: HTMLElement, section: string, index: number, text: string): void {
-		const card = cardList.createDiv({ cls: "paranoid-card", text });
+		const task = parseTask(text);
+		const priority = this.findPriority(task.priority);
+		const card = cardList.createDiv({ cls: "paranoid-card" });
 		card.draggable = true;
 
+		if (priority) {
+			const symbol = card.createSpan({ cls: "paranoid-priority", text: priority.symbol });
+			symbol.style.color = priority.color;
+			symbol.setAttr("aria-label", priority.name);
+		} else {
+			card.createSpan({
+				cls: "paranoid-priority is-unknown",
+				text: "?",
+				attr: { "aria-label": `Unknown priority: ${task.priority}` },
+			});
+		}
+		card.createSpan({ cls: "paranoid-card-text", text: task.text });
+
 		card.addEventListener("click", () => {
-			new TaskModal(this.app, {
-				title: "Edit task",
-				initialText: text,
-				onSubmit: (newText) => void this.mutate((l) => editTask(l, section, index, text, newText)),
-			}).open();
+			this.openTaskModal("Edit task", text, (l, line) => editTask(l, section, index, text, line));
 		});
 		card.addEventListener("dragstart", (e) => {
 			this.dragged = { section, index, text };
@@ -176,6 +195,33 @@ export class BoardView extends ItemView {
 			card.removeClass("is-dragging");
 			this.endDrag();
 		});
+	}
+
+	/** Priority for a tag; no tag means the default one. Returns null for a tag not in settings. */
+	private findPriority(name: string | null): Priority | null {
+		const priorities = this.plugin.settings.priorities;
+		if (name === null) return priorities[0];
+		return priorities.find((p) => sameTitle(p.name, name)) ?? null;
+	}
+
+	/**
+	 * Opens the task modal for a raw line ("" for a new task) and applies
+	 * `apply(list, newLine)` on save. The default priority is written without a tag.
+	 */
+	private openTaskModal(title: string, raw: string, apply: (list: TaskList, line: string) => TaskList): void {
+		const task = parseTask(raw);
+		const priorities = this.plugin.settings.priorities;
+		const defaultName = priorities[0].name;
+		new TaskModal(this.app, {
+			title,
+			initialText: task.text,
+			priorities: priorities.map((p) => p.name),
+			initialPriority: this.findPriority(task.priority)?.name ?? task.priority ?? defaultName,
+			onSubmit: (text, priority) => {
+				const line = formatTask(sameTitle(priority, defaultName) ? null : priority, text);
+				void this.mutate((l) => apply(l, line));
+			},
+		}).open();
 	}
 
 	private renderRemoveZone(root: HTMLElement): void {

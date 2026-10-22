@@ -1,18 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
 	addTask,
+	clearPriority,
 	editTask,
 	emptyList,
+	formatTask,
 	getItems,
 	mergeSection,
 	moveTask,
 	normalize,
 	parse,
+	parseTask,
+	renamePriority,
 	renameSection,
 	sanitize,
 	serialize,
 	TaskList,
 	validateColumnName,
+	validatePriorityName,
 } from "./tasks";
 
 const COLUMNS = ["Open", "Done"];
@@ -140,5 +145,47 @@ describe("section operations", () => {
 	it("deleting the only column recreates Open with all its tasks", () => {
 		const result = normalize(mergeSection(parse("## Todo\n- a\n## Remove\n"), "Todo", "Open"), ["Open"]);
 		expect(serialize(result)).toBe("## Open\n- a\n\n## Remove\n");
+	});
+});
+
+describe("priorities", () => {
+	it("parses and formats the priority tag", () => {
+		expect(parseTask("plain task")).toEqual({ priority: null, text: "plain task" });
+		expect(parseTask("[Priority: High] urgent")).toEqual({ priority: "High", text: "urgent" });
+		expect(parseTask("[priority:  Very High ]x")).toEqual({ priority: "Very High", text: "x" });
+		expect(parseTask("see [Priority: High] later")).toEqual({ priority: null, text: "see [Priority: High] later" });
+		expect(formatTask(null, "a")).toBe("a");
+		expect(formatTask("High", "a")).toBe("[Priority: High] a");
+	});
+
+	it("survives the Main.md round-trip", () => {
+		const list = parse("## Open\n* [Priority: High] Задача с высоким приоритетом\n");
+		expect(getItems(list, "Open")).toEqual(["[Priority: High] Задача с высоким приоритетом"]);
+		expect(serialize(list)).toBe("## Open\n- [Priority: High] Задача с высоким приоритетом\n");
+	});
+
+	const list = parse("## Open\n- [Priority: High] a\n- [Priority: Low] b\n## Remove\n- [priority: high] c\n- d\n");
+
+	it("renames tags in all sections, case-insensitively", () => {
+		expect(items(renamePriority(list, "High", "Urgent"))).toEqual({
+			Open: ["[Priority: Urgent] a", "[Priority: Low] b"],
+			Remove: ["[Priority: Urgent] c", "d"],
+		});
+	});
+
+	it("clears tags in all sections", () => {
+		expect(items(clearPriority(list, "High"))).toEqual({
+			Open: ["a", "[Priority: Low] b"],
+			Remove: ["c", "d"],
+		});
+	});
+
+	it("validates priority names", () => {
+		const names = ["Normal", "High"];
+		expect(validatePriorityName("", names, -1)).not.toBeNull();
+		expect(validatePriorityName("high", names, -1)).not.toBeNull();
+		expect(validatePriorityName("a]b", names, -1)).not.toBeNull();
+		expect(validatePriorityName("Low", names, -1)).toBeNull();
+		expect(validatePriorityName("Remove", names, -1)).toBeNull();
 	});
 });
