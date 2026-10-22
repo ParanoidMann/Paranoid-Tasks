@@ -367,19 +367,18 @@ export default class ParanoidTasksPlugin extends Plugin {
 		const { workspace } = this.app;
 		const existing = workspace.getLeavesOfType(VIEW_TYPE_BOARD)[0];
 		if (existing) {
-			workspace.revealLeaf(existing);
+			await workspace.revealLeaf(existing);
 			return;
 		}
 		const leaf = workspace.getLeaf("tab");
 		await leaf.setViewState({ type: VIEW_TYPE_BOARD, active: true });
-		workspace.revealLeaf(leaf);
+		await workspace.revealLeaf(leaf);
 	}
 }
 
 /** Obsidian's UI language mapped to a supported one; English otherwise. */
 function obsidianLanguage(): Language {
-	// getLanguage() exists since Obsidian 1.8.7; older versions keep the language in localStorage.
-	const code = typeof getLanguage === "function" ? getLanguage() : (window.localStorage.getItem("language") ?? "en");
+	const code = getLanguage();
 	return LANGUAGES.find((l) => code === l || code.startsWith(`${l}-`)) ?? "en";
 }
 
