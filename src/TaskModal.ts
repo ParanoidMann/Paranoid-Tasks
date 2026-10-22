@@ -1,7 +1,7 @@
 import { App, ButtonComponent, Modal, Notice, Setting, TextComponent } from "obsidian";
 import { ConfirmModal } from "./ConfirmModal";
-import { t } from "./i18n";
-import { isValidDate, sanitize } from "./tasks";
+import { t, TranslationKey } from "./i18n";
+import { formatRepeat, isValidDate, parseRepeat, RepeatRule, sanitize } from "./tasks";
 
 /**
  * What to do with the details note on save:
@@ -15,6 +15,8 @@ export interface TaskModalResult {
 	priority: string;
 	/** Deadline as YYYY-MM-DD, or null for none. */
 	deadline: string | null;
+	/** Repeat rule (e.g. "daily 09:00"), or null for a one-off task. */
+	repeat: string | null;
 	details: {
 		action: DetailsAction;
 		/** Note name from the name field (unused when the name follows the task text). */
@@ -29,6 +31,7 @@ export interface TaskModalOptions {
 	priorities: string[];
 	initialPriority: string;
 	initialDeadline: string | null;
+	initialRepeat: string | null;
 	/** Current details link target, or null if the task has no details. */
 	initialDetails: string | null;
 	/** Whether the current details note exists in the vault. */
@@ -36,7 +39,7 @@ export interface TaskModalOptions {
 	/** The note name follows the task text, so there is no name field. */
 	detailsFromText: boolean;
 	/** Which optional rows the dialog shows; hidden values are kept as they are. */
-	fields: { details: boolean; priority: boolean; deadline: boolean };
+	fields: { details: boolean; priority: boolean; deadline: boolean; repeat: boolean };
 	/** Start with details added (for new tasks when "Create details by default" is on). */
 	startWithDetails: boolean;
 	/**
@@ -53,6 +56,24 @@ export interface TaskModalOptions {
 	deleteNote?: string;
 }
 
+/** Frequency options in the dialog; the "…At" ones are the same kinds with a weekday/day and a time. */
+const REPEAT_CHOICES = ["hourly", "daily", "dailyAt", "weekly", "weeklyAt", "monthly", "monthlyAt", "yearly"] as const;
+type RepeatChoice = (typeof REPEAT_CHOICES)[number];
+
+/** Rule for a freshly picked frequency: 09:00, on Monday / the 1st where applicable. */
+function defaultRule(choice: RepeatChoice): RepeatRule {
+	switch (choice) {
+		case "dailyAt":
+			return { kind: "daily", time: "09:00" };
+		case "weeklyAt":
+			return { kind: "weekly", weekday: 1, time: "09:00" };
+		case "monthlyAt":
+			return { kind: "monthly", day: 1, time: "09:00" };
+		default:
+			return { kind: choice };
+	}
+}
+
 /** Details state while the modal is open; changes are applied only on save. */
 type DetailsState = "none" | "existing" | "added" | "removed";
 
@@ -61,6 +82,8 @@ export class TaskModal extends Modal {
 	private detailsEl: HTMLElement | null = null;
 	private priority: string;
 	private deadline: string | null;
+	private repeat: RepeatRule | null;
+	private repeatEl: HTMLElement | null = null;
 	private deadlineInput: TextComponent | null = null;
 	private detailsState: DetailsState;
 	private detailsName: string;
@@ -70,6 +93,7 @@ export class TaskModal extends Modal {
 		super(app);
 		this.priority = options.initialPriority;
 		this.deadline = options.initialDeadline;
+		this.repeat = options.initialRepeat ? parseRepeat(options.initialRepeat) : null;
 		this.detailsState = options.initialDetails ? "existing" : options.startWithDetails ? "added" : "none";
 		this.detailsName = options.initialDetails ?? "";
 	}
@@ -81,13 +105,17 @@ export class TaskModal extends Modal {
 		// Rows can be hidden in settings; then their current values are saved unchanged.
 		const shown = this.options.fields;
 		const fields =
-			shown.details || shown.priority || shown.deadline
+			shown.details || shown.priority || shown.deadline || shown.repeat
 				? this.contentEl.createDiv({ cls: "paranoid-task-fields" })
 				: null;
 		// Details first, then priority and deadline.
 		if (fields && shown.details) this.detailsEl = fields.createDiv();
 		if (fields && shown.priority) this.renderPriority(fields);
 		if (fields && shown.deadline) this.renderDeadline(fields);
+		if (fields && shown.repeat) {
+			this.repeatEl = fields.createDiv();
+			this.renderRepeat();
+		}
 
 		const label = this.contentEl.createEl("label", { cls: "paranoid-modal-label", text: t("modal.text") });
 		this.input = this.contentEl.createEl("textarea", { cls: "paranoid-modal-input" });
@@ -154,6 +182,63 @@ export class TaskModal extends Modal {
 						this.deadlineInput?.setValue("");
 					}),
 			);
+	}
+
+	/** "Recurring task" toggle and, when on, the frequency (with weekday/day and time for the "…at" options). */
+	private renderRepeat(): void {
+		const el = this.repeatEl;
+		if (!el) return;
+		el.empty();
+
+		new Setting(el).setName(t("modal.repeat")).addToggle((toggle) =>
+			toggle.setValue(this.repeat !== null).onChange((on) => {
+				this.repeat = on ? { kind: "daily" } : null;
+				this.renderRepeat();
+			}),
+		);
+		if (!this.repeat) return;
+
+		const rule = this.repeat;
+		const choice: RepeatChoice = !rule.time ? rule.kind : rule.kind === "daily" ? "dailyAt" : rule.kind === "weekly" ? "weeklyAt" : "monthlyAt";
+		const setting = new Setting(el).setName(t("modal.repeatEvery")).addDropdown((dropdown) => {
+			for (const option of REPEAT_CHOICES) dropdown.addOption(option, t(`repeat.${option}`));
+			dropdown.setValue(choice).onChange((value) => {
+				this.repeat = defaultRule(value as RepeatChoice);
+				this.renderRepeat();
+			});
+		});
+
+		if (choice === "weeklyAt") {
+			setting.addDropdown((dropdown) => {
+				for (let weekday = 1; weekday <= 7; weekday++) {
+					dropdown.addOption(String(weekday), t(`weekday.${weekday}` as TranslationKey));
+				}
+				dropdown.setValue(String(rule.weekday ?? 1)).onChange((value) => {
+					this.repeat = { ...rule, weekday: Number(value) };
+				});
+			});
+		}
+		if (choice === "monthlyAt") {
+			setting.addText((text) => {
+				text.inputEl.type = "number";
+				text.inputEl.min = "1";
+				text.inputEl.max = "31";
+				text.inputEl.addClass("paranoid-number-input");
+				text.inputEl.setAttr("aria-label", t("modal.repeatDay"));
+				text.setValue(String(rule.day ?? 1)).onChange((value) => {
+					const day = Number(value);
+					if (Number.isInteger(day) && day >= 1 && day <= 31) this.repeat = { ...(this.repeat ?? rule), day };
+				});
+			});
+		}
+		if (choice === "dailyAt" || choice === "weeklyAt" || choice === "monthlyAt") {
+			setting.addText((text) => {
+				text.inputEl.type = "time";
+				text.setValue(rule.time ?? "09:00").onChange((value) => {
+					if (/^\d{2}:\d{2}$/.test(value)) this.repeat = { ...(this.repeat ?? rule), time: value };
+				});
+			});
+		}
 	}
 
 	private renderDetails(): void {
@@ -275,6 +360,7 @@ export class TaskModal extends Modal {
 					text,
 					priority: this.priority,
 					deadline: this.deadline,
+					repeat: this.repeat ? formatRepeat(this.repeat) : null,
 					details: { action: this.detailsAction(), name: sanitize(this.detailsName) },
 				},
 				open,

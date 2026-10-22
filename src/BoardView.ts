@@ -1,5 +1,5 @@
 import { ItemView, Notice, setIcon, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
-import { formatDate, t } from "./i18n";
+import { formatDate, t, TranslationKey } from "./i18n";
 import type ParanoidTasksPlugin from "./main";
 import type { ColumnConfig, Priority } from "./settings";
 import {
@@ -15,6 +15,10 @@ import {
 	clearSection,
 	daysUntil,
 	deleteTask as deleteTaskLine,
+	formatDoneTime,
+	ParsedTask,
+	parseRepeat,
+	RepeatRule,
 	toFileName,
 	toISODate,
 } from "./tasks";
@@ -31,6 +35,17 @@ import {
 } from "./details";
 
 export const VIEW_TYPE_BOARD = "paranoid-tasks-board";
+
+/** Human-readable repeat rule, e.g. "Every day at 09:00". */
+function repeatLabel(rule: RepeatRule): string {
+	const time = rule.time;
+	if (!time) return t(`repeat.${rule.kind}`);
+	if (rule.kind === "weekly" && rule.weekday) {
+		return t("repeat.weeklyAtTime", { weekday: t(`weekdayOn.${rule.weekday}` as TranslationKey), time });
+	}
+	if (rule.kind === "monthly" && rule.day) return t("repeat.monthlyAtTime", { day: rule.day, time });
+	return t("repeat.dailyAtTime", { time });
+}
 
 /** How a column of cards is drawn. */
 interface ColumnView {
@@ -313,6 +328,21 @@ export class BoardView extends ItemView {
 		const card = cardList.createDiv({ cls: "paranoid-card" });
 		card.draggable = true;
 
+		if (task.repeat) {
+			const checkbox = card.createEl("input", {
+				type: "checkbox",
+				cls: "task-list-item-checkbox paranoid-card-checkbox",
+				attr: { "aria-label": t("board.markDone") },
+			});
+			checkbox.checked = task.done !== null;
+			if (checkbox.checked) card.addClass("is-done");
+			checkbox.addEventListener("click", (e) => {
+				e.stopPropagation();
+				const line = formatTask({ ...task, done: checkbox.checked ? formatDoneTime(new Date()) : null });
+				void this.mutate((l) => editTask(l, section, index, text, line));
+			});
+		}
+
 		if (priority) {
 			const symbol = card.createSpan({ cls: "paranoid-priority", text: priority.symbol });
 			symbol.style.color = priority.color;
@@ -332,6 +362,12 @@ export class BoardView extends ItemView {
 				cls: "paranoid-card-deadline" + (overdue ? " is-overdue" : ""),
 				text: t("board.deadline", { date: formatDate(task.deadline) }),
 			});
+		}
+		const rule = task.repeat ? parseRepeat(task.repeat) : null;
+		if (rule && this.plugin.settings.repeatShow) {
+			const repeat = body.createDiv({ cls: "paranoid-card-repeat" });
+			setIcon(repeat.createSpan({ cls: "paranoid-card-repeat-icon" }), "repeat");
+			repeat.createSpan({ text: repeatLabel(rule) });
 		}
 
 		if (task.details && this.plugin.settings.showDetailsIcon) {
@@ -401,6 +437,7 @@ export class BoardView extends ItemView {
 			priorities: priorities.map((p) => p.name),
 			initialPriority: this.findPriority(task.priority)?.name ?? task.priority ?? priorities[0].name,
 			initialDeadline: task.deadline,
+			initialRepeat: task.repeat,
 			initialDetails: task.details,
 			detailsExists: detailsFile !== null,
 			detailsFromText: this.plugin.settings.detailsFromText,
@@ -408,16 +445,16 @@ export class BoardView extends ItemView {
 				details: this.plugin.settings.dialogDetails,
 				priority: this.plugin.settings.dialogPriority,
 				deadline: this.plugin.settings.dialogDeadline,
+				repeat: this.plugin.settings.dialogRepeat,
 			},
 			// raw is "" only for a new task; hidden details are never added by default.
 			startWithDetails: raw === "" && this.plugin.settings.detailsByDefault && this.plugin.settings.dialogDetails,
-			onSubmit: (result, open) => this.saveTask(task.details, result, open, apply),
+			onSubmit: (result, open) => this.saveTask(task, result, open, apply),
 			onDelete: remove,
 			deleteNote: trashesDetails ? t("modal.deleteTaskDetails", { name: task.details ?? "" }) : undefined,
 		}).open();
 	}
 
-	/** Deletes the task line, then trashes its details note unless the user keeps them. */
 	/** Asks, then deletes every task in Remove (and their details notes, like single deletion). */
 	private confirmClearRemoved(list: TaskList): void {
 		const items = getItems(list, REMOVE_SECTION);
@@ -447,6 +484,7 @@ export class BoardView extends ItemView {
 		}).open();
 	}
 
+	/** Deletes the task line, then trashes its details note unless the user keeps them. */
 	private async deleteTask(section: string, index: number, raw: string): Promise<void> {
 		const { details } = parseTask(raw);
 		const file = details ? resolveDetails(this.app, details) : null;
@@ -460,16 +498,19 @@ export class BoardView extends ItemView {
 	 * handler finds nothing left to fix; a new note is created before it is linked.
 	 */
 	private async saveTask(
-		oldDetails: string | null,
+		old: ParsedTask,
 		result: TaskModalResult,
 		open: boolean,
 		apply: (list: TaskList, line: string) => TaskList,
 	): Promise<void> {
 		const { priorities, detailsFromText } = this.plugin.settings;
+		const oldDetails = old.details;
+		// The check mark is kept unless the task stops being recurring.
+		const done = result.repeat ? old.done : null;
 		const columns = this.plugin.columnNames();
 		const priority = sameTitle(result.priority, priorities[0].name) ? null : result.priority;
 		const write = (details: string | null) =>
-			updateTasks(this.app, columns, (l) => apply(l, formatTask({ priority, deadline: result.deadline, details, text: result.text })));
+			updateTasks(this.app, columns, (l) => apply(l, formatTask({ priority, deadline: result.deadline, repeat: result.repeat, done, details, text: result.text })));
 		// An empty name field means "same as the task text".
 		const name = toFileName(detailsFromText || !result.details.name ? result.text : result.details.name);
 		const oldFile = oldDetails ? resolveDetails(this.app, oldDetails) : null;

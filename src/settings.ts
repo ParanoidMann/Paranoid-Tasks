@@ -72,6 +72,9 @@ export interface ParanoidTasksSettings {
 	dialogDetails: boolean;
 	dialogPriority: boolean;
 	dialogDeadline: boolean;
+	dialogRepeat: boolean;
+	/** Show the repeat rule under the task text on cards. */
+	repeatShow: boolean;
 	/** Keep the details note when its task is deleted (otherwise it goes to trash). */
 	keepDetailsOnDelete: boolean;
 	/** Show the deadline under the task text on cards. */
@@ -103,6 +106,8 @@ export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
 	dialogDetails: true,
 	dialogPriority: true,
 	dialogDeadline: true,
+	dialogRepeat: true,
+	repeatShow: true,
 	keepDetailsOnDelete: false,
 	deadlineShow: true,
 	deadlineEscalate: false,
@@ -210,6 +215,7 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 			case "cards":
 				this.displayPriorities(body);
 				this.displayDeadline(body);
+				this.displayRepeat(body);
 				this.displayDetails(body);
 				break;
 		}
@@ -336,6 +342,20 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 					.setDisabled(!deadlineEscalate || candidates.length === 0)
 					.onChange((value) => update({ deadlinePriority: value }));
 			});
+	}
+
+	private displayRepeat(containerEl: HTMLElement): void {
+		new Setting(containerEl).setName(t("settings.repeat")).setDesc(t("settings.repeatDesc")).setHeading();
+		this.addDialogToggle(containerEl, "dialogRepeat");
+
+		new Setting(containerEl)
+			.setName(t("settings.repeatShow"))
+			.setDesc(t("settings.repeatShowDesc"))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.repeatShow)
+					.onChange((value) => void this.run(() => this.plugin.updateSettings({ repeatShow: value }), false)),
+			);
 	}
 
 	private displayDetails(containerEl: HTMLElement): void {
@@ -529,7 +549,7 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 	}
 
 	/** "Show in task dialog" toggle for one of the optional dialog rows. */
-	private addDialogToggle(containerEl: HTMLElement, key: "dialogDetails" | "dialogPriority" | "dialogDeadline"): void {
+	private addDialogToggle(containerEl: HTMLElement, key: "dialogDetails" | "dialogPriority" | "dialogDeadline" | "dialogRepeat"): void {
 		new Setting(containerEl)
 			.setName(t("settings.showInDialog"))
 			.setDesc(t("settings.showInDialogDesc"))

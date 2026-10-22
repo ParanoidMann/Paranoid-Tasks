@@ -20,6 +20,7 @@ import {
 	renameDetails,
 	renamePriority as renamePriorityTags,
 	renameSection,
+	resetRecurring,
 	sanitize,
 	serialize,
 	TaskList,
@@ -51,16 +52,17 @@ export default class ParanoidTasksPlugin extends Plugin {
 
 		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => void this.onFileRenamed(file, oldPath)));
 
-		// Deadline escalation: on start, every hour (the day may change) and shortly after the task file changes.
+		// Automatic updates (deadline escalation, recurring resets): on start, every minute (hourly and
+		// "daily HH:MM" resets need minute precision) and shortly after the task file changes.
 		// It only writes when something changes, so reacting to its own writes does not loop.
-		const checkSoon = debounce(() => void this.checkDeadlines(), 1000, true);
+		const checkSoon = debounce(() => void this.runMaintenance(), 1000, true);
 		this.registerEvent(
 			this.app.vault.on("modify", (file) => {
 				if (file.path === taskFilePath()) checkSoon();
 			}),
 		);
-		this.registerInterval(window.setInterval(() => void this.checkDeadlines(), 60 * 60 * 1000));
-		this.app.workspace.onLayoutReady(() => void this.checkDeadlines());
+		this.registerInterval(window.setInterval(() => void this.runMaintenance(), 60 * 1000));
+		this.app.workspace.onLayoutReady(() => void this.runMaintenance());
 	}
 
 	/**
@@ -119,25 +121,30 @@ export default class ParanoidTasksPlugin extends Plugin {
 			if (!Number.isInteger(days) || days < 0 || days > 365) throw new Error(t("error.deadlineDays"));
 		}
 		await this.updateSettings(patch);
-		await this.checkDeadlines();
+		await this.runMaintenance();
 	}
 
 	/**
-	 * Gives the configured priority to default-priority tasks whose deadline is
-	 * close (writes the task file). Does nothing when the feature is off.
+	 * Time-based updates of the task file: unchecks recurring tasks whose period
+	 * has passed and, if enabled, raises the priority of tasks with a close
+	 * deadline. Writes only when something changes.
 	 */
-	async checkDeadlines(): Promise<void> {
-		const { deadlineEscalate, deadlineDays, deadlinePriority, priorities } = this.settings;
-		if (!deadlineEscalate || !deadlinePriority) return;
+	async runMaintenance(): Promise<void> {
 		if (!(this.app.vault.getAbstractFileByPath(taskFilePath()) instanceof TFile)) return;
 
-		const today = toISODate(new Date());
-		const escalate = (l: TaskList) =>
-			escalatePriorities(l, today, deadlineDays, deadlinePriority, priorities[0].name);
+		const { deadlineEscalate, deadlineDays, deadlinePriority, priorities } = this.settings;
+		const now = new Date();
+		const today = toISODate(now);
+		const update = (l: TaskList) => {
+			const reset = resetRecurring(l, now);
+			return deadlineEscalate && deadlinePriority
+				? escalatePriorities(reset, today, deadlineDays, deadlinePriority, priorities[0].name)
+				: reset;
+		};
 		try {
 			const list = await readTasks(this.app);
-			if (serialize(escalate(list)) === serialize(list)) return;
-			await updateTasks(this.app, this.columnNames(), escalate);
+			if (serialize(update(list)) === serialize(list)) return;
+			await updateTasks(this.app, this.columnNames(), update);
 		} catch (e) {
 			new Notice(t("notice.error", { message: (e as Error).message }));
 		}
@@ -336,6 +343,8 @@ export default class ParanoidTasksPlugin extends Plugin {
 			dialogDetails: loadBoolean(data?.dialogDetails, DEFAULT_SETTINGS.dialogDetails),
 			dialogPriority: loadBoolean(data?.dialogPriority, DEFAULT_SETTINGS.dialogPriority),
 			dialogDeadline: loadBoolean(data?.dialogDeadline, DEFAULT_SETTINGS.dialogDeadline),
+			dialogRepeat: loadBoolean(data?.dialogRepeat, DEFAULT_SETTINGS.dialogRepeat),
+			repeatShow: loadBoolean(data?.repeatShow, DEFAULT_SETTINGS.repeatShow),
 			keepDetailsOnDelete: loadBoolean(data?.keepDetailsOnDelete, DEFAULT_SETTINGS.keepDetailsOnDelete),
 			deadlineShow: loadBoolean(data?.deadlineShow, DEFAULT_SETTINGS.deadlineShow),
 			deadlineEscalate: loadBoolean(data?.deadlineEscalate, DEFAULT_SETTINGS.deadlineEscalate),
