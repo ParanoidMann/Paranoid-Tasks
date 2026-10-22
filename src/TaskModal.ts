@@ -1,5 +1,6 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import { ConfirmModal } from "./ConfirmModal";
+import { t } from "./i18n";
 import { sanitize } from "./tasks";
 
 /**
@@ -64,7 +65,7 @@ export class TaskModal extends Modal {
 		// Keep a priority that is not in settings (e.g. typed into Main.md by hand) so saving does not drop it.
 		const names = [...this.options.priorities];
 		if (!names.includes(this.priority)) names.push(this.priority);
-		new Setting(this.contentEl).setName("Priority").addDropdown((dropdown) => {
+		new Setting(this.contentEl).setName(t("modal.priority")).addDropdown((dropdown) => {
 			for (const name of names) dropdown.addOption(name, name);
 			dropdown.setValue(this.priority).onChange((value) => (this.priority = value));
 		});
@@ -82,8 +83,8 @@ export class TaskModal extends Modal {
 		});
 
 		new Setting(this.contentEl)
-			.addButton((b) => b.setButtonText("Save").setCta().onClick(() => void this.submit(false)))
-			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()));
+			.addButton((b) => b.setButtonText(t("common.save")).setCta().onClick(() => void this.submit(false)))
+			.addButton((b) => b.setButtonText(t("common.cancel")).onClick(() => this.close()));
 
 		this.renderDetails();
 		this.input.focus();
@@ -96,13 +97,13 @@ export class TaskModal extends Modal {
 
 	private renderDetails(): void {
 		this.detailsEl.empty();
-		const setting = new Setting(this.detailsEl).setName("Details");
+		const setting = new Setting(this.detailsEl).setName(t("modal.details"));
 		const { detailsFromText, initialDetails, detailsExists } = this.options;
 
 		if (this.detailsState === "none" || this.detailsState === "removed") {
 			setting.addButton((b) =>
 				b
-					.setButtonText("Add")
+					.setButtonText(t("common.add"))
 					.setCta()
 					.onClick(() => {
 						if (this.detailsState === "removed") {
@@ -122,12 +123,13 @@ export class TaskModal extends Modal {
 		const existing = this.detailsState === "existing";
 		const missing = existing && !detailsExists;
 		if (detailsFromText) {
-			setting.setDesc(existing ? `${initialDetails}${missing ? " (not found)" : ""}` : "Named after the task text");
+			const name = initialDetails ?? "";
+			setting.setDesc(existing ? (missing ? t("modal.detailsMissing", { name }) : name) : t("modal.detailsFromText"));
 		} else {
-			if (missing) setting.setDesc("Note not found");
+			if (missing) setting.setDesc(t("modal.noteNotFound"));
 			setting.addText((text) =>
 				text
-					.setPlaceholder(existing ? "Note name" : "Same as task text")
+					.setPlaceholder(existing ? t("modal.notePlaceholder") : t("modal.sameAsText"))
 					.setValue(this.detailsName)
 					.onChange((value) => (this.detailsName = value)),
 			);
@@ -136,14 +138,14 @@ export class TaskModal extends Modal {
 		if (existing && detailsExists) {
 			setting.addButton((b) =>
 				b
-					.setButtonText("Open")
-					.setTooltip("Save and open the details note")
+					.setButtonText(t("common.open"))
+					.setTooltip(t("modal.openTooltip"))
 					.onClick(() => void this.submit(true)),
 			);
 		}
 		setting.addButton((b) =>
 			b
-				.setButtonText("Delete")
+				.setButtonText(t("common.delete"))
 				.setWarning()
 				.onClick(() => {
 					if (!existing || missing) {
@@ -153,9 +155,9 @@ export class TaskModal extends Modal {
 						return;
 					}
 					new ConfirmModal(this.app, {
-						title: "Delete details?",
-						message: `The note "${initialDetails}" will be moved to trash when you save the task.`,
-						confirmText: "Delete",
+						title: t("modal.deleteDetailsTitle"),
+						message: t("modal.deleteDetailsMessage", { name: initialDetails ?? "" }),
+						confirmText: t("common.delete"),
 						onConfirm: () => {
 							this.detailsState = "removed";
 							this.renderDetails();
@@ -182,7 +184,7 @@ export class TaskModal extends Modal {
 		if (this.submitting) return;
 		const text = sanitize(this.input.value);
 		if (!text) {
-			new Notice("Task text is empty");
+			new Notice(t("modal.emptyText"));
 			return;
 		}
 		this.submitting = true;

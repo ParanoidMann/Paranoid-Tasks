@@ -1,4 +1,5 @@
 import { App, Modal, Setting } from "obsidian";
+import { t } from "./i18n";
 
 export interface ConfirmModalOptions {
 	title: string;
@@ -26,7 +27,7 @@ export class ConfirmModal extends Modal {
 						this.options.onConfirm();
 					}),
 			)
-			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()));
+			.addButton((b) => b.setButtonText(t("common.cancel")).onClick(() => this.close()));
 	}
 
 	onClose(): void {

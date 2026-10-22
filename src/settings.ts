@@ -9,6 +9,7 @@ import {
 	TFolder,
 	ToggleComponent,
 } from "obsidian";
+import { Language, LANGUAGES, t, TranslationKey } from "./i18n";
 import type ParanoidTasksPlugin from "./main";
 import { REMOVE_SECTION } from "./tasks";
 import { DEFAULT_TASK_FILE, DEFAULT_TASK_FOLDER } from "./taskStore";
@@ -36,12 +37,17 @@ export function newColumn(name: string): ColumnConfig {
 	return { name, collapsible: true, showCount: true, collapsed: false };
 }
 
+/** "auto" follows Obsidian's language. */
+export type LanguagePreference = "auto" | Language;
+
 export interface ParanoidTasksSettings {
+	/** UI language of the plugin. */
+	language: LanguagePreference;
 	/** Folder with the task file and details notes ("" for the vault root). */
 	taskFolder: string;
 	/** Task file name without ".md". */
 	taskFile: string;
-	/** Board title in the ribbon tooltip and the tab header. */
+	/** Board title in the ribbon tooltip and the tab header; "" means the localized default. */
 	boardName: string;
 	/** Icon id of the board in the ribbon and the tab header. */
 	boardIcon: string;
@@ -60,9 +66,10 @@ export interface ParanoidTasksSettings {
 }
 
 export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
+	language: "auto",
 	taskFolder: DEFAULT_TASK_FOLDER,
 	taskFile: DEFAULT_TASK_FILE,
-	boardName: "Task board",
+	boardName: "",
 	boardIcon: "layout-dashboard",
 	columns: [newColumn("Open"), newColumn("Done")],
 	columnDrag: true,
@@ -77,10 +84,10 @@ export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
 
 type SettingsTab = "general" | "columns" | "cards";
 
-const TABS: { id: SettingsTab; label: string }[] = [
-	{ id: "general", label: "General" },
-	{ id: "columns", label: "Columns" },
-	{ id: "cards", label: "Cards" },
+const TABS: { id: SettingsTab; label: TranslationKey }[] = [
+	{ id: "general", label: "settings.tab.general" },
+	{ id: "columns", label: "settings.tab.columns" },
+	{ id: "cards", label: "settings.tab.cards" },
 ];
 
 /** Suggests vault folders while typing into a text input. */
@@ -156,7 +163,7 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 
 		const nav = containerEl.createDiv({ cls: "paranoid-settings-tabs" });
 		for (const tab of TABS) {
-			const button = nav.createEl("button", { cls: "paranoid-settings-tab", text: tab.label });
+			const button = nav.createEl("button", { cls: "paranoid-settings-tab", text: t(tab.label) });
 			if (tab.id === this.activeTab) button.addClass("is-active");
 			button.addEventListener("click", () => {
 				this.activeTab = tab.id;
@@ -180,27 +187,41 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 
 		containerEl.createDiv({
 			cls: "paranoid-settings-version",
-			text: `${this.plugin.manifest.name} v${this.plugin.manifest.version}`,
+			text: t("settings.version", { name: this.plugin.manifest.name, version: this.plugin.manifest.version }),
 		});
 	}
 
 	private displayGeneral(containerEl: HTMLElement): void {
-		const { boardName, boardIcon } = this.plugin.settings;
-		new Setting(containerEl).setName("Board").setHeading();
+		const { boardName, boardIcon, language } = this.plugin.settings;
 
 		new Setting(containerEl)
-			.setName("Board name")
-			.setDesc("Shown in the left ribbon tooltip and on the board tab.")
+			.setName(t("settings.language"))
+			.setDesc(t("settings.languageDesc"))
+			.addDropdown((dropdown) => {
+				dropdown.addOption("auto", t("settings.languageAuto"));
+				for (const lang of LANGUAGES) dropdown.addOption(lang, t(`language.${lang}`));
+				dropdown
+					.setValue(language)
+					.onChange(
+						(value) => void this.run(() => this.plugin.setLanguagePreference(value as LanguagePreference)),
+					);
+			});
+
+		new Setting(containerEl).setName(t("settings.board")).setHeading();
+
+		new Setting(containerEl)
+			.setName(t("settings.boardName"))
+			.setDesc(t("settings.boardNameDesc"))
 			.addText((text) => {
-				text.setPlaceholder(DEFAULT_SETTINGS.boardName).setValue(boardName);
+				text.setPlaceholder(t("board.defaultName")).setValue(boardName);
 				text.inputEl.addEventListener("change", () => {
 					void this.run(() => this.plugin.changeBoardAppearance({ boardName: text.getValue() }));
 				});
 			});
 
 		const iconSetting = new Setting(containerEl)
-			.setName("Board icon")
-			.setDesc("Icon in the left ribbon and on the board tab. Start typing to search icons (lucide.dev names work).");
+			.setName(t("settings.boardIcon"))
+			.setDesc(t("settings.boardIconDesc"));
 		const preview = iconSetting.controlEl.createDiv({ cls: "paranoid-icon-preview" });
 		setIcon(preview, boardIcon);
 		iconSetting.addText((text) => {
@@ -211,17 +232,14 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 		});
 
 		new Setting(containerEl)
-			.setName("Storage")
-			.setDesc(
-				"Where the task list and details notes are kept. Changing these only switches the board to another file; " +
-					"existing files are not moved. A missing file is created.",
-			)
+			.setName(t("settings.storage"))
+			.setDesc(t("settings.storageDesc"))
 			.setHeading();
 
 		const { taskFolder, taskFile } = this.plugin.settings;
 		new Setting(containerEl)
-			.setName("Task folder")
-			.setDesc("Vault folder for the task file and new details notes. Empty means the vault root.")
+			.setName(t("settings.taskFolder"))
+			.setDesc(t("settings.taskFolderDesc"))
 			.addText((text) => {
 				text.setPlaceholder(DEFAULT_TASK_FOLDER).setValue(taskFolder);
 				const apply = (path: string) =>
@@ -231,8 +249,8 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Task file")
-			.setDesc("Name of the note with the task list, without .md.")
+			.setName(t("settings.taskFile"))
+			.setDesc(t("settings.taskFileDesc"))
 			.addText((text) => {
 				text.setPlaceholder(DEFAULT_TASK_FILE).setValue(taskFile);
 				text.inputEl.addEventListener("change", () => {
@@ -243,16 +261,13 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 
 	private displayDetails(containerEl: HTMLElement): void {
 		new Setting(containerEl)
-			.setName("Details")
-			.setDesc("A task can have a details note in the task folder, linked as [Details: [[Name]]].")
+			.setName(t("settings.details"))
+			.setDesc(t("settings.detailsDesc"))
 			.setHeading();
 
 		new Setting(containerEl)
-			.setName("Task text is the details file name")
-			.setDesc(
-				"On: the note is named after the task text; editing the text renames the note and renaming the note changes the text. " +
-					"Off: the note name is set separately in the task dialog.",
-			)
+			.setName(t("settings.detailsFromText"))
+			.setDesc(t("settings.detailsFromTextDesc"))
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.detailsFromText)
@@ -262,8 +277,8 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Create details by default")
-			.setDesc("New tasks start with details added; you can still remove them in the task dialog before saving.")
+			.setName(t("settings.detailsByDefault"))
+			.setDesc(t("settings.detailsByDefaultDesc"))
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.detailsByDefault)
@@ -273,8 +288,8 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Show details icon on cards")
-			.setDesc("Clicking the icon opens the details note.")
+			.setName(t("settings.showDetailsIcon"))
+			.setDesc(t("settings.showDetailsIconDesc"))
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.showDetailsIcon)
@@ -288,16 +303,13 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 		const columns = this.plugin.settings.columns;
 
 		new Setting(containerEl)
-			.setName("Columns")
-			.setDesc(
-				`Each column is a section in the task file. Deleting a column moves its tasks to the first remaining column. ` +
-					`"${REMOVE_SECTION}" is always present and cannot be changed.`,
-			)
+			.setName(t("settings.columns"))
+			.setDesc(t("settings.columnsDesc", { remove: REMOVE_SECTION }))
 			.setHeading();
 
 		new Setting(containerEl)
-			.setName("Drag columns on the board")
-			.setDesc("Reorder columns by dragging their headers.")
+			.setName(t("settings.columnDrag"))
+			.setDesc(t("settings.columnDragDesc"))
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.columnDrag)
@@ -316,21 +328,21 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 				.addExtraButton((b) =>
 					b
 						.setIcon("arrow-up")
-						.setTooltip("Move up")
+						.setTooltip(t("common.moveUp"))
 						.setDisabled(index === 0)
 						.onClick(() => void this.run(() => this.plugin.moveColumn(index, -1))),
 				)
 				.addExtraButton((b) =>
 					b
 						.setIcon("arrow-down")
-						.setTooltip("Move down")
+						.setTooltip(t("common.moveDown"))
 						.setDisabled(index === columns.length - 1)
 						.onClick(() => void this.run(() => this.plugin.moveColumn(index, 1))),
 				)
 				.addExtraButton((b) =>
 					b
 						.setIcon("trash-2")
-						.setTooltip("Delete column")
+						.setTooltip(t("settings.deleteColumn"))
 						.onClick(() => void this.run(() => this.plugin.deleteColumn(index))),
 				);
 			setting.settingEl.addClass("paranoid-column-setting");
@@ -342,41 +354,37 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 				new ToggleComponent(option).setValue(value).onChange(onChange);
 				option.createSpan({ text: label });
 			};
-			addOption("Collapsible", "Show the arrow that collapses this column", column.collapsible, (collapsible) => {
+			addOption(t("settings.collapsible"), t("settings.collapsibleTooltip"), column.collapsible, (collapsible) => {
 				void this.run(() => this.plugin.updateColumn(index, { collapsible }), false);
 			});
-			addOption("Task count", "Show the number of tasks next to the title", column.showCount, (showCount) => {
+			addOption(t("settings.taskCount"), t("settings.taskCountTooltip"), column.showCount, (showCount) => {
 				void this.run(() => this.plugin.updateColumn(index, { showCount }), false);
 			});
 		});
 
-		this.addNewItemRow(containerEl, "New column", "Column name", (name) => this.plugin.addColumn(name));
+		this.addNewItemRow(containerEl, t("settings.newColumn"), t("settings.columnNamePlaceholder"), (name) => this.plugin.addColumn(name));
 	}
 
 	private displayPriorities(containerEl: HTMLElement): void {
 		const priorities = this.plugin.settings.priorities;
 
 		new Setting(containerEl)
-			.setName("Priorities")
-			.setDesc(
-				"Shown as a symbol before the task text and written to Main.md as [Priority: Name]. " +
-					"The first priority is the default: it has no tag and cannot be deleted. " +
-					"Deleting a priority makes its tasks default.",
-			)
+			.setName(t("settings.priorities"))
+			.setDesc(t("settings.prioritiesDesc"))
 			.setHeading();
 
 		priorities.forEach((priority, index) => {
 			const isDefault = index === 0;
 			const setting = new Setting(containerEl)
-				.setDesc(isDefault ? "Default — not written to Main.md" : "")
+				.setDesc(isDefault ? t("settings.defaultPriority") : "")
 				.addText((text) => {
-					text.setValue(priority.name).setPlaceholder("Name");
+					text.setValue(priority.name).setPlaceholder(t("settings.priorityNamePlaceholder"));
 					text.inputEl.addEventListener("change", () => {
 						void this.run(() => this.plugin.renamePriority(index, text.getValue()));
 					});
 				})
 				.addText((text) => {
-					text.setValue(priority.symbol).setPlaceholder("Symbol");
+					text.setValue(priority.symbol).setPlaceholder(t("settings.symbolPlaceholder"));
 					text.inputEl.addClass("paranoid-symbol-input");
 					text.inputEl.addEventListener("change", () => {
 						void this.run(() => this.plugin.updatePriority(index, { symbol: text.getValue() }), false);
@@ -393,26 +401,26 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 				.addExtraButton((b) =>
 					b
 						.setIcon("arrow-up")
-						.setTooltip("Move up")
+						.setTooltip(t("common.moveUp"))
 						.setDisabled(index === 1)
 						.onClick(() => void this.run(() => this.plugin.movePriority(index, -1))),
 				)
 				.addExtraButton((b) =>
 					b
 						.setIcon("arrow-down")
-						.setTooltip("Move down")
+						.setTooltip(t("common.moveDown"))
 						.setDisabled(index === priorities.length - 1)
 						.onClick(() => void this.run(() => this.plugin.movePriority(index, 1))),
 				)
 				.addExtraButton((b) =>
 					b
 						.setIcon("trash-2")
-						.setTooltip("Delete priority")
+						.setTooltip(t("settings.deletePriority"))
 						.onClick(() => void this.run(() => this.plugin.deletePriority(index))),
 				);
 		});
 
-		this.addNewItemRow(containerEl, "New priority", "Priority name", (name) => this.plugin.addPriority(name));
+		this.addNewItemRow(containerEl, t("settings.newPriority"), t("settings.newPriorityPlaceholder"), (name) => this.plugin.addPriority(name));
 	}
 
 	/** Text field + Add button (Enter also adds). */
@@ -433,7 +441,7 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 			})
 			.addButton((b) =>
 				b
-					.setButtonText("Add")
+					.setButtonText(t("common.add"))
 					.setCta()
 					.onClick(() => void this.run(() => add(newName))),
 			);

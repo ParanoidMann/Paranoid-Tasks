@@ -1,8 +1,10 @@
-import { getIconIds, normalizePath, Notice, Plugin, setIcon, TAbstractFile, TFile } from "obsidian";
+import { getIconIds, getLanguage, normalizePath, Notice, Plugin, setIcon, TAbstractFile, TFile } from "obsidian";
 import { BoardView, VIEW_TYPE_BOARD } from "./BoardView";
+import { Language, LANGUAGES, setLanguage, t } from "./i18n";
 import {
 	ColumnConfig,
 	DEFAULT_SETTINGS,
+	LanguagePreference,
 	newColumn,
 	ParanoidTasksSettings,
 	ParanoidTasksSettingTab,
@@ -30,14 +32,16 @@ export default class ParanoidTasksPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+		this.applyLanguage();
 
 		this.registerView(VIEW_TYPE_BOARD, (leaf) => new BoardView(leaf, this));
 		this.addSettingTab(new ParanoidTasksSettingTab(this.app, this));
 
-		this.ribbonEl = this.addRibbonIcon(this.settings.boardIcon, this.settings.boardName, () => void this.activateView());
+		this.ribbonEl = this.addRibbonIcon(this.settings.boardIcon, this.boardTitle(), () => void this.activateView());
 		this.addCommand({
 			id: "open-board",
-			name: "Open task board",
+			// Obsidian keeps the name it was registered with, so a language change shows here after a restart.
+			name: t("command.openBoard"),
 			callback: () => void this.activateView(),
 		});
 
@@ -51,7 +55,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 	async changeTaskLocation(patch: { taskFolder?: string; taskFile?: string }): Promise<void> {
 		const folder = patch.taskFolder !== undefined ? toFolderPath(patch.taskFolder) : this.settings.taskFolder;
 		const file = patch.taskFile !== undefined ? toTaskFileName(patch.taskFile) : this.settings.taskFile;
-		if (!file) throw new Error("Task file name is empty");
+		if (!file) throw new Error(t("error.taskFileEmpty"));
 		if (folder === this.settings.taskFolder && file === this.settings.taskFile) return;
 
 		setTaskLocation(folder, file);
@@ -64,28 +68,47 @@ export default class ParanoidTasksPlugin extends Plugin {
 		await this.updateSettings({ taskFolder: folder, taskFile: file });
 	}
 
-	/** Changes the board name/icon shown in the ribbon and on open board tabs. */
+	/** Board title: the custom name, or the default one in the current language. */
+	boardTitle(): string {
+		return this.settings.boardName || t("board.defaultName");
+	}
+
+	/** Changes the board name/icon shown in the ribbon and on open board tabs. An empty name means the default. */
 	async changeBoardAppearance(patch: { boardName?: string; boardIcon?: string }): Promise<void> {
 		const name = patch.boardName !== undefined ? sanitize(patch.boardName) : this.settings.boardName;
 		const icon = patch.boardIcon !== undefined ? patch.boardIcon.trim() : this.settings.boardIcon;
-		if (!name) throw new Error("Board name is empty");
-		if (!isIconId(icon)) throw new Error(`Unknown icon "${icon}"`);
-
+		if (!isIconId(icon)) throw new Error(t("error.unknownIcon", { name: icon }));
 		await this.updateSettings({ boardName: name, boardIcon: icon });
-		if (this.ribbonEl) {
-			setIcon(this.ribbonEl, icon);
-			this.ribbonEl.setAttr("aria-label", name);
-		}
-		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BOARD)) {
-			// Not in the public API; without it the tab header updates after reopening the board.
-			(leaf as unknown as { updateHeader?: () => void }).updateHeader?.();
-		}
+	}
+
+	async setLanguagePreference(language: LanguagePreference): Promise<void> {
+		await this.updateSettings({ language });
 	}
 
 	async updateSettings(patch: Partial<ParanoidTasksSettings>): Promise<void> {
 		this.settings = { ...this.settings, ...patch };
 		await this.saveData(this.settings);
+		if (patch.language !== undefined) this.applyLanguage();
+		if (patch.language !== undefined || patch.boardName !== undefined || patch.boardIcon !== undefined) {
+			this.updateBoardChrome();
+		}
 		this.refreshBoards();
+	}
+
+	private applyLanguage(): void {
+		setLanguage(this.settings.language === "auto" ? obsidianLanguage() : this.settings.language);
+	}
+
+	/** Updates the ribbon icon/tooltip and the headers of open board tabs. */
+	private updateBoardChrome(): void {
+		if (this.ribbonEl) {
+			setIcon(this.ribbonEl, this.settings.boardIcon);
+			this.ribbonEl.setAttr("aria-label", this.boardTitle());
+		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BOARD)) {
+			// Not in the public API; without it the tab header updates after reopening the board.
+			(leaf as unknown as { updateHeader?: () => void }).updateHeader?.();
+		}
 	}
 
 	/** Keeps [Details: [[...]]] links in Main.md pointing to a details note after it is renamed or moved. */
@@ -107,7 +130,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 			if (serialize(rename(list)) === serialize(list)) return;
 			await updateTasks(this.app, this.columnNames(), rename);
 		} catch (e) {
-			new Notice(`Paranoid Tasks: ${(e as Error).message}`);
+			new Notice(t("notice.error", { message: (e as Error).message }));
 		}
 	}
 
@@ -249,7 +272,9 @@ export default class ParanoidTasksPlugin extends Plugin {
 		this.settings = {
 			taskFolder: folder,
 			taskFile: file,
-			boardName: (typeof data?.boardName === "string" && sanitize(data.boardName)) || DEFAULT_SETTINGS.boardName,
+			language: loadLanguage(data?.language),
+			// "Task board" was the stored default before localization; treat it as "use the default".
+			boardName: typeof data?.boardName === "string" && data.boardName !== "Task board" ? sanitize(data.boardName) : "",
 			boardIcon:
 				typeof data?.boardIcon === "string" && isIconId(data.boardIcon) ? data.boardIcon : DEFAULT_SETTINGS.boardIcon,
 			columns: loadColumns(data),
@@ -272,6 +297,17 @@ export default class ParanoidTasksPlugin extends Plugin {
 		await leaf.setViewState({ type: VIEW_TYPE_BOARD, active: true });
 		workspace.revealLeaf(leaf);
 	}
+}
+
+/** Obsidian's UI language mapped to a supported one; English otherwise. */
+function obsidianLanguage(): Language {
+	// getLanguage() exists since Obsidian 1.8.7; older versions keep the language in localStorage.
+	const code = typeof getLanguage === "function" ? getLanguage() : (window.localStorage.getItem("language") ?? "en");
+	return LANGUAGES.find((l) => code === l || code.startsWith(`${l}-`)) ?? "en";
+}
+
+function loadLanguage(value: unknown): LanguagePreference {
+	return value === "auto" || LANGUAGES.includes(value as Language) ? (value as LanguagePreference) : "auto";
 }
 
 function assertValid(error: string | null): void {

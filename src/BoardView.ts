@@ -1,4 +1,5 @@
 import { ItemView, Notice, setIcon, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
+import { t } from "./i18n";
 import type ParanoidTasksPlugin from "./main";
 import type { ColumnConfig, Priority } from "./settings";
 import {
@@ -72,7 +73,7 @@ export class BoardView extends ItemView {
 		try {
 			await ensureTaskFile(this.app, this.plugin.columnNames());
 		} catch (e) {
-			new Notice(`Paranoid Tasks: ${(e as Error).message}`);
+			new Notice(t("notice.error", { message: (e as Error).message }));
 		}
 		await this.refresh();
 	}
@@ -93,7 +94,7 @@ export class BoardView extends ItemView {
 		try {
 			await updateTasks(this.app, this.plugin.columnNames(), fn);
 		} catch (e) {
-			new Notice(`Paranoid Tasks: ${(e as Error).message}`);
+			new Notice(t("notice.error", { message: (e as Error).message }));
 		}
 	}
 
@@ -157,7 +158,7 @@ export class BoardView extends ItemView {
 			const from = this.draggedColumn;
 			const to = this.isLeftHalf(column, e.clientX) ? index : index + 1;
 			this.endDrag();
-			void this.plugin.moveColumnTo(from, to).catch((err: Error) => new Notice(`Paranoid Tasks: ${err.message}`));
+			void this.plugin.moveColumnTo(from, to).catch((err: Error) => new Notice(t("notice.error", { message: err.message })));
 		});
 	}
 
@@ -181,7 +182,7 @@ export class BoardView extends ItemView {
 		if (config.collapsible) {
 			const toggle = header.createDiv({
 				cls: "clickable-icon paranoid-collapse-toggle",
-				attr: { "aria-label": "Collapse column" },
+				attr: { "aria-label": t("board.collapseColumn") },
 			});
 			setIcon(toggle, "chevron-down");
 			toggle.addEventListener("click", () => void this.plugin.setCollapsed(section, true));
@@ -190,10 +191,10 @@ export class BoardView extends ItemView {
 		if (config.showCount) {
 			header.createSpan({ cls: "paranoid-column-count", text: String(items.length) });
 		}
-		const addButton = header.createDiv({ cls: "clickable-icon paranoid-add", attr: { "aria-label": "Add task" } });
+		const addButton = header.createDiv({ cls: "clickable-icon paranoid-add", attr: { "aria-label": t("board.addTask") } });
 		setIcon(addButton, "plus");
 		addButton.addEventListener("click", () => {
-			this.openTaskModal(`New task in ${title}`, "", (l, line) => addTask(l, section, line));
+			this.openTaskModal(t("board.newTaskTitle", { column: title }), "", (l, line) => addTask(l, section, line));
 		});
 
 		const cardList = column.createDiv({ cls: "paranoid-cards" });
@@ -222,7 +223,7 @@ export class BoardView extends ItemView {
 		const section = config.name;
 		const column = root.createDiv({
 			cls: "paranoid-column is-collapsed",
-			attr: { "aria-label": `Expand ${section}` },
+			attr: { "aria-label": t("board.expandColumn", { name: section }) },
 		});
 		setIcon(column.createDiv({ cls: "paranoid-collapse-toggle" }), "chevron-right");
 		column.createDiv({ cls: "paranoid-column-title", text: section });
@@ -263,7 +264,7 @@ export class BoardView extends ItemView {
 			card.createSpan({
 				cls: "paranoid-priority is-unknown",
 				text: "?",
-				attr: { "aria-label": `Unknown priority: ${task.priority}` },
+				attr: { "aria-label": t("board.unknownPriority", { name: task.priority ?? "" }) },
 			});
 		}
 		card.createSpan({ cls: "paranoid-card-text", text: task.text });
@@ -273,7 +274,9 @@ export class BoardView extends ItemView {
 			const missing = !resolveDetails(this.app, details);
 			const icon = card.createDiv({
 				cls: "clickable-icon paranoid-details-icon" + (missing ? " is-missing" : ""),
-				attr: { "aria-label": missing ? `Details note not found: ${details}` : `Open ${details}` },
+				attr: {
+					"aria-label": missing ? t("board.detailsMissing", { name: details }) : t("board.openDetails", { name: details }),
+				},
 			});
 			setIcon(icon, "file-text");
 			icon.addEventListener("click", (e) => {
@@ -283,7 +286,7 @@ export class BoardView extends ItemView {
 		}
 
 		card.addEventListener("click", () => {
-			this.openTaskModal("Edit task", text, (l, line) => editTask(l, section, index, text, line));
+			this.openTaskModal(t("board.editTaskTitle"), text, (l, line) => editTask(l, section, index, text, line));
 		});
 		card.addEventListener("dragstart", (e) => {
 			this.dragged = { section, index, text };
@@ -376,10 +379,11 @@ export class BoardView extends ItemView {
 	private renderRemoveZone(root: HTMLElement): void {
 		const zone = root.createDiv({ cls: "paranoid-column paranoid-remove-zone" });
 		const header = zone.createDiv({ cls: "paranoid-column-header" });
-		header.createSpan({ cls: "paranoid-column-title", text: REMOVE_SECTION });
+		// Only the label is translated; the section in the file is always REMOVE_SECTION.
+		header.createSpan({ cls: "paranoid-column-title", text: t("board.removeTitle") });
 		const body = zone.createDiv({ cls: "paranoid-remove-body" });
 		setIcon(body.createDiv({ cls: "paranoid-remove-icon" }), "trash-2");
-		body.createDiv({ text: "Drop here to remove" });
+		body.createDiv({ text: t("board.dropToRemove") });
 
 		zone.addEventListener("dragover", (e) => {
 			if (!this.dragged) return;

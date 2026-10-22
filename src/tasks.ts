@@ -1,5 +1,6 @@
 // Pure task-list logic: parsing/serializing Main.md and list operations.
 // Must not import "obsidian" so it can be unit-tested.
+import { t, TranslationKey } from "./i18n";
 
 /** Service section: always present, always last, never shown on the board. */
 export const REMOVE_SECTION = "Remove";
@@ -100,22 +101,28 @@ export function sanitize(text: string): string {
 }
 
 /** Common name check: non-empty and unique (case-insensitive) except for the item at `index`. */
-function validateName(kind: string, name: string, names: string[], index: number): string | null {
-	if (!name) return `${kind} name is empty`;
-	if (names.some((n, i) => i !== index && sameTitle(n, name))) return `${kind} "${name}" already exists`;
+function validateName(
+	name: string,
+	names: string[],
+	index: number,
+	emptyKey: TranslationKey,
+	existsKey: TranslationKey,
+): string | null {
+	if (!name) return t(emptyKey);
+	if (names.some((n, i) => i !== index && sameTitle(n, name))) return t(existsKey, { name });
 	return null;
 }
 
 /** Returns an error message, or null if `name` is a valid new name for column `index` (-1 for a new column). */
 export function validateColumnName(name: string, columns: string[], index: number): string | null {
-	if (sameTitle(name, REMOVE_SECTION)) return `"${REMOVE_SECTION}" is reserved`;
-	return validateName("Column", name, columns, index);
+	if (sameTitle(name, REMOVE_SECTION)) return t("error.reserved", { name: REMOVE_SECTION });
+	return validateName(name, columns, index, "error.columnNameEmpty", "error.columnExists");
 }
 
 /** Returns an error message, or null if `name` is a valid new name for priority `index` (-1 for a new one). */
 export function validatePriorityName(name: string, priorities: string[], index: number): string | null {
-	if (/[[\]]/.test(name)) return "Priority name cannot contain brackets";
-	return validateName("Priority", name, priorities, index);
+	if (/[[\]]/.test(name)) return t("error.priorityBrackets");
+	return validateName(name, priorities, index, "error.priorityNameEmpty", "error.priorityExists");
 }
 
 const PRIORITY_TAG = /^\[Priority:\s*([^\]]+?)\s*\]\s*/i;

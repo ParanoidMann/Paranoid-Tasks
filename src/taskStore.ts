@@ -1,4 +1,5 @@
 import { App, normalizePath, TFile } from "obsidian";
+import { t } from "./i18n";
 import { emptyList, normalize, parse, serialize, TaskList } from "./tasks";
 
 export const DEFAULT_TASK_FOLDER = "Tasks";
@@ -30,7 +31,7 @@ export async function ensureTaskFile(app: App, columns: string[]): Promise<TFile
 	const folder = taskFolder();
 	const existing = app.vault.getAbstractFileByPath(path);
 	if (existing instanceof TFile) return existing;
-	if (existing) throw new Error(`${path} exists but is not a file`);
+	if (existing) throw new Error(t("error.notAFile", { path }));
 
 	if (folder && !app.vault.getAbstractFileByPath(folder)) {
 		try {

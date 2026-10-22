@@ -1,5 +1,6 @@
 import { App, TFile } from "obsidian";
 import { ensureTaskFile, taskFileName, taskFilePath, taskFolder } from "./taskStore";
+import { t } from "./i18n";
 import { sameTitle } from "./tasks";
 
 /** Finds the note a details link points to, like Obsidian resolves links in Main.md. */
@@ -15,11 +16,11 @@ export function detailsPath(name: string, current: TFile | null = null): string 
 
 /** Throws if `name` cannot be used for a new details note or for renaming `current`. */
 export function checkDetailsName(app: App, name: string, current: TFile | null = null): void {
-	if (!name) throw new Error("Details name is empty");
-	if (sameTitle(name, taskFileName())) throw new Error(`"${name}" is reserved for the task list`);
+	if (!name) throw new Error(t("error.detailsNameEmpty"));
+	if (sameTitle(name, taskFileName())) throw new Error(t("error.detailsReserved", { name }));
 	const path = detailsPath(name, current);
 	const existing = app.vault.getAbstractFileByPath(path);
-	if (existing && existing !== current) throw new Error(`${path} already exists`);
+	if (existing && existing !== current) throw new Error(t("error.alreadyExists", { path }));
 }
 
 export async function createDetails(app: App, name: string, columns: string[]): Promise<void> {
