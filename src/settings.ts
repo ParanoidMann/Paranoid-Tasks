@@ -37,6 +37,9 @@ export function newColumn(name: string): ColumnConfig {
 	return { name, collapsible: true, showCount: true, collapsed: false };
 }
 
+export const REMOVE_ZONE_MODES = ["always", "drag", "never"] as const;
+export type RemoveZoneMode = (typeof REMOVE_ZONE_MODES)[number];
+
 /** "auto" follows Obsidian's language. */
 export type LanguagePreference = "auto" | Language;
 
@@ -55,6 +58,8 @@ export interface ParanoidTasksSettings {
 	columns: ColumnConfig[];
 	/** Whether columns can be reordered by dragging on the board. */
 	columnDrag: boolean;
+	/** When the Remove drop zone is shown on the board (the section stays in the file either way). */
+	removeZone: RemoveZoneMode;
 	/** Task priorities in dropdown order. The first one is the default and is not written to Main.md. */
 	priorities: Priority[];
 	/** The details note name always equals the task text (renaming one renames the other). */
@@ -73,6 +78,7 @@ export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
 	boardIcon: "layout-dashboard",
 	columns: [newColumn("Open"), newColumn("Done")],
 	columnDrag: true,
+	removeZone: "always",
 	priorities: [
 		{ name: "Normal", symbol: "●", color: "#4caf50" },
 		{ name: "High", symbol: "●", color: "#ff9800" },
@@ -315,6 +321,19 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.columnDrag)
 					.onChange((value) => void this.run(() => this.plugin.setColumnDrag(value), false)),
 			);
+
+		new Setting(containerEl)
+			.setName(t("settings.removeZone", { remove: t("board.removeTitle") }))
+			.setDesc(t("settings.removeZoneDesc", { remove: REMOVE_SECTION }))
+			.addDropdown((dropdown) => {
+				for (const mode of REMOVE_ZONE_MODES) dropdown.addOption(mode, t(`settings.removeZone.${mode}`));
+				dropdown
+					.setValue(this.plugin.settings.removeZone)
+					.onChange(
+						(value) =>
+							void this.run(() => this.plugin.updateSettings({ removeZone: value as RemoveZoneMode }), false),
+					);
+			});
 
 		columns.forEach((column, index) => {
 			const setting = new Setting(containerEl)

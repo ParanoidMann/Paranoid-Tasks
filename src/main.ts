@@ -5,6 +5,8 @@ import {
 	ColumnConfig,
 	DEFAULT_SETTINGS,
 	LanguagePreference,
+	REMOVE_ZONE_MODES,
+	RemoveZoneMode,
 	newColumn,
 	ParanoidTasksSettings,
 	ParanoidTasksSettingTab,
@@ -279,6 +281,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 				typeof data?.boardIcon === "string" && isIconId(data.boardIcon) ? data.boardIcon : DEFAULT_SETTINGS.boardIcon,
 			columns: loadColumns(data),
 			columnDrag: loadBoolean(data?.columnDrag, DEFAULT_SETTINGS.columnDrag),
+			removeZone: loadRemoveZone(data),
 			priorities: loadPriorities(data?.priorities),
 			detailsFromText: loadBoolean(data?.detailsFromText, DEFAULT_SETTINGS.detailsFromText),
 			detailsByDefault: loadBoolean(data?.detailsByDefault, DEFAULT_SETTINGS.detailsByDefault),
@@ -304,6 +307,13 @@ function obsidianLanguage(): Language {
 	// getLanguage() exists since Obsidian 1.8.7; older versions keep the language in localStorage.
 	const code = typeof getLanguage === "function" ? getLanguage() : (window.localStorage.getItem("language") ?? "en");
 	return LANGUAGES.find((l) => code === l || code.startsWith(`${l}-`)) ?? "en";
+}
+
+/** Reads the Remove zone mode; the earlier "showRemove: false" toggle meant never showing it. */
+function loadRemoveZone(data: { removeZone?: unknown; showRemove?: unknown } | null): RemoveZoneMode {
+	const mode = data?.removeZone;
+	if (REMOVE_ZONE_MODES.includes(mode as RemoveZoneMode)) return mode as RemoveZoneMode;
+	return data?.showRemove === false ? "never" : DEFAULT_SETTINGS.removeZone;
 }
 
 function loadLanguage(value: unknown): LanguagePreference {

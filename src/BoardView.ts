@@ -114,7 +114,8 @@ export class BoardView extends ItemView {
 					: this.renderColumn(root, column, items);
 			this.setupColumnDrag(columnEl, index);
 		});
-		this.renderRemoveZone(root);
+		const { removeZone } = this.plugin.settings;
+		if (removeZone !== "never") this.renderRemoveZone(root, removeZone === "drag");
 	}
 
 	/**
@@ -293,6 +294,10 @@ export class BoardView extends ItemView {
 			e.dataTransfer?.setData("text/plain", text);
 			if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
 			card.addClass("is-dragging");
+			// Changing layout inside dragstart can cancel the drag in Chromium, so reveal the zone a tick later.
+			window.setTimeout(() => {
+				if (this.dragged) this.contentEl.addClass("is-dragging-card");
+			});
 		});
 		card.addEventListener("dragend", () => {
 			card.removeClass("is-dragging");
@@ -376,8 +381,10 @@ export class BoardView extends ItemView {
 		if (open && details) await openDetails(this.app, details);
 	}
 
-	private renderRemoveZone(root: HTMLElement): void {
+	/** `dragOnly`: hidden by CSS until a card drag adds "is-dragging-card" to the board. */
+	private renderRemoveZone(root: HTMLElement, dragOnly: boolean): void {
 		const zone = root.createDiv({ cls: "paranoid-column paranoid-remove-zone" });
+		if (dragOnly) zone.addClass("is-drag-only");
 		const header = zone.createDiv({ cls: "paranoid-column-header" });
 		// Only the label is translated; the section in the file is always REMOVE_SECTION.
 		header.createSpan({ cls: "paranoid-column-title", text: t("board.removeTitle") });
@@ -434,6 +441,7 @@ export class BoardView extends ItemView {
 
 	private endDrag(): void {
 		this.dragged = null;
+		this.contentEl.removeClass("is-dragging-card");
 		this.draggedColumn = null;
 		this.hideIndicator();
 		this.clearColumnDropMarks();

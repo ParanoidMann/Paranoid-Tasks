@@ -225,3 +225,11 @@
 	font-size: var(--font-ui-smaller);
 	cursor: pointer;
 }
+
+.paranoid-remove-zone.is-drag-only {
+	display: none;
+}
+
+.paranoid-board.is-dragging-card .paranoid-remove-zone.is-drag-only {
+	display: flex;
+}
