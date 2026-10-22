@@ -82,10 +82,20 @@ export class BoardView extends ItemView {
 	}
 
 	private renderColumn(root: HTMLElement, section: string, items: string[]): void {
+		if (this.plugin.settings.collapsed.includes(section)) {
+			this.renderCollapsedColumn(root, section, items);
+			return;
+		}
 		const title = section;
 		const column = root.createDiv({ cls: "paranoid-column" });
 
 		const header = column.createDiv({ cls: "paranoid-column-header" });
+		const toggle = header.createDiv({
+			cls: "clickable-icon paranoid-collapse-toggle",
+			attr: { "aria-label": "Collapse column" },
+		});
+		setIcon(toggle, "chevron-down");
+		toggle.addEventListener("click", () => void this.plugin.setCollapsed(section, true));
 		header.createSpan({ cls: "paranoid-column-title", text: title });
 		header.createSpan({ cls: "paranoid-column-count", text: String(items.length) });
 		const addButton = header.createDiv({ cls: "clickable-icon paranoid-add", attr: { "aria-label": "Add task" } });
@@ -115,6 +125,33 @@ export class BoardView extends ItemView {
 			e.preventDefault();
 			const toIndex = this.dropIndex(cardList, e.clientY);
 			this.drop(section, toIndex);
+		});
+	}
+
+	/** Narrow vertical strip with the title; click expands, dropping a card appends it to the column. */
+	private renderCollapsedColumn(root: HTMLElement, section: string, items: string[]): void {
+		const column = root.createDiv({
+			cls: "paranoid-column is-collapsed",
+			attr: { "aria-label": `Expand ${section}` },
+		});
+		setIcon(column.createDiv({ cls: "paranoid-collapse-toggle" }), "chevron-right");
+		column.createDiv({ cls: "paranoid-column-title", text: section });
+		column.createDiv({ cls: "paranoid-column-count", text: String(items.length) });
+		column.addEventListener("click", () => void this.plugin.setCollapsed(section, false));
+
+		column.addEventListener("dragover", (e) => {
+			if (!this.dragged) return;
+			e.preventDefault();
+			if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+			column.addClass("is-drop-target");
+		});
+		column.addEventListener("dragleave", (e) => {
+			if (!column.contains(e.relatedTarget as Node | null)) column.removeClass("is-drop-target");
+		});
+		column.addEventListener("drop", (e) => {
+			if (!this.dragged) return;
+			e.preventDefault();
+			this.drop(section, Number.MAX_SAFE_INTEGER);
 		});
 	}
 

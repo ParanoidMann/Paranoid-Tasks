@@ -36,6 +36,33 @@
 	margin-left: auto;
 }
 
+.paranoid-collapse-toggle {
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+}
+
+.paranoid-column.is-collapsed {
+	flex: 0 0 auto;
+	width: 36px;
+	align-items: center;
+	padding: 8px 0;
+	cursor: pointer;
+}
+
+.paranoid-column.is-collapsed:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.paranoid-column.is-collapsed .paranoid-column-title {
+	writing-mode: vertical-rl;
+	white-space: nowrap;
+}
+
+.paranoid-column.is-collapsed.is-drop-target {
+	outline: 2px solid var(--interactive-accent);
+}
+
 .paranoid-cards {
 	display: flex;
 	flex-direction: column;

@@ -5,10 +5,13 @@ import { REMOVE_SECTION } from "./tasks";
 export interface ParanoidTasksSettings {
 	/** Board columns in display order. Never contains Remove. */
 	columns: string[];
+	/** Names of columns collapsed on the board. */
+	collapsed: string[];
 }
 
 export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
 	columns: ["Open", "Done"],
+	collapsed: [],
 };
 
 export class ParanoidTasksSettingTab extends PluginSettingTab {

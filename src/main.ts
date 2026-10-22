@@ -35,7 +35,8 @@ export default class ParanoidTasksPlugin extends Plugin {
 		if (name === oldName) return;
 		assertValid(validateColumnName(name, columns, index));
 		const next = columns.map((c, i) => (i === index ? name : c));
-		await this.applyColumns(next, (l) => renameSection(l, oldName, name));
+		const collapsed = this.settings.collapsed.map((c) => (c === oldName ? name : c));
+		await this.applyColumns(next, (l) => renameSection(l, oldName, name), collapsed);
 	}
 
 	/** Deletes a column, moving its tasks to the first remaining one (or a recreated Open). */
@@ -55,10 +56,22 @@ export default class ParanoidTasksPlugin extends Plugin {
 		await this.applyColumns(next);
 	}
 
+	async setCollapsed(column: string, collapsed: boolean): Promise<void> {
+		const others = this.settings.collapsed.filter((c) => c !== column);
+		this.settings.collapsed = collapsed ? [...others, column] : others;
+		await this.saveData(this.settings);
+		this.refreshBoards();
+	}
+
 	/** Rewrites Main.md for the new columns, then saves settings and redraws boards. */
-	private async applyColumns(columns: string[], fn?: (list: TaskList) => TaskList): Promise<void> {
+	private async applyColumns(
+		columns: string[],
+		fn?: (list: TaskList) => TaskList,
+		collapsed = this.settings.collapsed,
+	): Promise<void> {
 		await updateTasks(this.app, columns, fn);
 		this.settings.columns = columns;
+		this.settings.collapsed = collapsed.filter((c) => columns.includes(c));
 		await this.saveData(this.settings);
 		this.refreshBoards();
 	}
@@ -76,7 +89,11 @@ export default class ParanoidTasksPlugin extends Plugin {
 			const name = typeof raw === "string" ? sanitize(raw) : "";
 			if (validateColumnName(name, columns, -1) === null) columns.push(name);
 		}
-		this.settings = { columns: columns.length > 0 ? columns : [DEFAULT_COLUMN] };
+		if (columns.length === 0) columns.push(DEFAULT_COLUMN);
+		const collapsed = Array.isArray(data?.collapsed)
+			? data.collapsed.filter((c): c is string => typeof c === "string" && columns.includes(c))
+			: [];
+		this.settings = { columns, collapsed };
 	}
 
 	private async activateView(): Promise<void> {
