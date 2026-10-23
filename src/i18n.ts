@@ -3,6 +3,8 @@
 import en from "./locales/en.json";
 import ru from "./locales/ru.json";
 import de from "./locales/de.json";
+import fr from "./locales/fr.json";
+import es from "./locales/es.json";
 
 export type TranslationKey = keyof typeof en;
 type Translations = Record<TranslationKey, string>;
@@ -12,9 +14,11 @@ const LOCALES: Record<string, Translations> = {
 	en,
 	ru: ru satisfies Translations,
 	de: de satisfies Translations,
+	fr: fr satisfies Translations,
+	es: es satisfies Translations,
 };
 
-export const LANGUAGES = ["en", "ru", "de"] as const;
+export const LANGUAGES = ["en", "ru", "de", "fr", "es"] as const;
 export type Language = (typeof LANGUAGES)[number];
 
 let current: Translations = en;
