@@ -101,6 +101,10 @@ export class TaskModal extends Modal {
 	onOpen(): void {
 		this.titleEl.setText(this.options.title);
 		this.modalEl.addClass("paranoid-task-modal");
+		// Phones: the container stops above the on-screen keyboard (see styles.css); once the keyboard
+		// is shown, scroll the focused field back into view.
+		this.containerEl.addClass("paranoid-task-modal-container");
+		window.addEventListener("keyboardDidShow", this.onKeyboardShown);
 		// Compact label/control rows (styled in styles.css), then the task text below.
 		// Rows can be hidden in settings; then their current values are saved unchanged.
 		const shown = this.options.fields;
@@ -152,8 +156,14 @@ export class TaskModal extends Modal {
 	}
 
 	onClose(): void {
+		window.removeEventListener("keyboardDidShow", this.onKeyboardShown);
 		this.contentEl.empty();
 	}
+
+	private onKeyboardShown = (): void => {
+		const focused = document.activeElement;
+		if (focused instanceof HTMLElement && this.modalEl.contains(focused)) focused.scrollIntoView({ block: "nearest" });
+	};
 
 	private renderPriority(containerEl: HTMLElement): void {
 		// Keep a priority that is not in settings (e.g. typed into Main.md by hand) so saving does not drop it.

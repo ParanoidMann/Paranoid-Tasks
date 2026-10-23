@@ -207,7 +207,7 @@ export class BoardView extends ItemView {
 			if (this.draggedColumn === null) return;
 			e.preventDefault();
 			if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-			const before = this.isLeftHalf(column, e.clientX);
+			const before = this.isFirstHalf(column, e);
 			this.clearColumnDropMarks();
 			column.addClass(before ? "is-drop-before" : "is-drop-after");
 		});
@@ -218,15 +218,18 @@ export class BoardView extends ItemView {
 			if (this.draggedColumn === null) return;
 			e.preventDefault();
 			const from = this.draggedColumn;
-			const to = this.isLeftHalf(column, e.clientX) ? index : index + 1;
+			const to = this.isFirstHalf(column, e) ? index : index + 1;
 			this.endDrag();
 			void this.plugin.moveColumnTo(from, to).catch((err: Error) => new Notice(t("notice.error", { message: err.message })));
 		});
 	}
 
-	private isLeftHalf(el: HTMLElement, clientX: number): boolean {
+	/** Whether the cursor is in the left half of a column, or the top half when columns are stacked (phones). */
+	private isFirstHalf(el: HTMLElement, e: DragEvent): boolean {
 		const rect = el.getBoundingClientRect();
-		return clientX < rect.left + rect.width / 2;
+		return getComputedStyle(this.contentEl).flexDirection === "column"
+			? e.clientY < rect.top + rect.height / 2
+			: e.clientX < rect.left + rect.width / 2;
 	}
 
 	private clearColumnDropMarks(): void {

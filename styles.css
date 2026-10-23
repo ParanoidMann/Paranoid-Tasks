@@ -383,3 +383,47 @@
 .is-phone .paranoid-modal-footer button {
 	padding: 10px 14px;
 }
+
+/* Phones: Obsidian centers modals in the full screen height, so the on-screen keyboard covers the
+   lower half of the dialog. Obsidian sets --keyboard-height while the keyboard is open; end the
+   container above it and let the dialog shrink (its content scrolls). */
+.is-phone .modal-container.paranoid-task-modal-container {
+	bottom: var(--keyboard-height, 0px);
+	--dialog-max-height: calc(100vh - var(--safe-area-inset-top) - var(--keyboard-height, 0px));
+}
+
+/* Phones: columns are stacked one under another and the board scrolls vertically. */
+.is-phone .paranoid-board {
+	flex-direction: column;
+	align-items: stretch;
+	overflow-x: hidden;
+}
+
+.is-phone .paranoid-column {
+	flex: 0 0 auto;
+	min-height: 0;
+}
+
+/* A collapsed column is a full-width strip with a horizontal title. */
+.is-phone .paranoid-column.is-collapsed {
+	width: auto;
+	flex-direction: row;
+	padding: 8px 12px;
+}
+
+.is-phone .paranoid-column.is-collapsed .paranoid-column-title {
+	writing-mode: horizontal-tb;
+}
+
+.is-phone .paranoid-remove-zone {
+	flex-basis: auto;
+	min-height: 80px;
+}
+
+.is-phone .paranoid-column.is-drop-before {
+	box-shadow: 0 -3px 0 var(--interactive-accent);
+}
+
+.is-phone .paranoid-column.is-drop-after {
+	box-shadow: 0 3px 0 var(--interactive-accent);
+}
