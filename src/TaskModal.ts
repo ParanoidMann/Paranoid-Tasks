@@ -1,5 +1,6 @@
 import { App, ButtonComponent, Modal, Notice, Setting, TextComponent } from "obsidian";
 import { ConfirmModal } from "./ConfirmModal";
+import { hapticTap } from "./haptics";
 import { t, TranslationKey } from "./i18n";
 import { formatRepeat, isValidDate, parseRepeat, RepeatRule, sanitize } from "./tasks";
 
@@ -142,7 +143,10 @@ export class TaskModal extends Modal {
 		if (onDelete) {
 			new ButtonComponent(left)
 				.setButtonText(t("common.delete"))
-				.onClick(() => this.confirmDelete(onDelete));
+				.onClick(() => {
+					hapticTap();
+					this.confirmDelete(onDelete);
+				});
 		}
 		new ButtonComponent(right)
 			.setButtonText(t("common.save"))

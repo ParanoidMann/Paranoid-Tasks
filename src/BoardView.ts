@@ -24,6 +24,7 @@ import {
 } from "./tasks";
 import { ensureTaskFile, readTasks, taskFilePath, updateTasks } from "./taskStore";
 import { ConfirmModal } from "./ConfirmModal";
+import { hapticTap } from "./haptics";
 import { TaskModal, TaskModalResult } from "./TaskModal";
 import {
 	checkDetailsName,
@@ -542,7 +543,15 @@ export class BoardView extends ItemView {
 		}
 		if (!sameTitle(section, REMOVE_SECTION)) {
 			menu.addSeparator();
-			menu.addItem((item) => item.setTitle(t("board.menuRemove")).setIcon("archive").onClick(() => move(REMOVE_SECTION)));
+			menu.addItem((item) =>
+				item
+					.setTitle(t("board.menuRemove"))
+					.setIcon("archive")
+					.onClick(() => {
+						hapticTap();
+						move(REMOVE_SECTION);
+					}),
+			);
 		}
 		menu.showAtPosition(position);
 	}
