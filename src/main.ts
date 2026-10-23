@@ -14,6 +14,7 @@ import {
 } from "./settings";
 import {
 	clearPriority,
+	columnsInList,
 	DEFAULT_COLUMN,
 	escalatePriorities,
 	mergeSection,
@@ -21,6 +22,7 @@ import {
 	renamePriority as renamePriorityTags,
 	renameSection,
 	resetRecurring,
+	sameTitle,
 	sanitize,
 	serialize,
 	TaskList,
@@ -68,6 +70,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 	/**
 	 * Points the board to another task file (existing files are not moved).
 	 * The file is created if missing; on failure the previous location is kept.
+	 * An existing file brings its columns (section headings, in order) into settings.
 	 */
 	async changeTaskLocation(patch: { taskFolder?: string; taskFile?: string }): Promise<void> {
 		const folder = patch.taskFolder !== undefined ? toFolderPath(patch.taskFolder) : this.settings.taskFolder;
@@ -76,13 +79,17 @@ export default class ParanoidTasksPlugin extends Plugin {
 		if (folder === this.settings.taskFolder && file === this.settings.taskFile) return;
 
 		setTaskLocation(folder, file);
+		let columns = this.settings.columns;
 		try {
-			await ensureTaskFile(this.app, this.columnNames());
+			const names = columnsInList(await readTasks(this.app));
+			// Keep board options of columns that are already configured.
+			if (names.length > 0) columns = names.map((name) => columns.find((c) => sameTitle(c.name, name)) ?? newColumn(name));
+			await ensureTaskFile(this.app, columns.map((c) => c.name));
 		} catch (e) {
 			setTaskLocation(this.settings.taskFolder, this.settings.taskFile);
 			throw e;
 		}
-		await this.updateSettings({ taskFolder: folder, taskFile: file });
+		await this.updateSettings({ taskFolder: folder, taskFile: file, columns });
 	}
 
 	/** Board title: the custom name, or the default one in the current language. */

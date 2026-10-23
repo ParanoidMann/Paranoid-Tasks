@@ -110,7 +110,7 @@
 	"settings.boardIconDesc": "Symbol in der linken Seitenleiste und im Board-Tab. Tippen, um Symbole zu suchen (Namen von lucide.dev funktionieren).",
 
 	"settings.storage": "Speicherort",
-	"settings.storageDesc": "Wo die Aufgabenliste und die Detailnotizen liegen. Eine Änderung schaltet das Board nur auf eine andere Datei um; vorhandene Dateien werden nicht verschoben. Eine fehlende Datei wird erstellt.",
+	"settings.storageDesc": "Wo die Aufgabenliste und die Detailnotizen liegen. Eine Änderung schaltet das Board nur auf eine andere Datei um; vorhandene Dateien werden nicht verschoben. Gibt es die Datei schon, werden die Spalten aus ihr übernommen. Eine fehlende Datei wird erstellt.",
 	"settings.taskFolder": "Aufgabenordner",
 	"settings.taskFolderDesc": "Ordner für die Aufgabendatei und neue Detailnotizen. Leer bedeutet das Stammverzeichnis des Vaults.",
 	"settings.taskFile": "Aufgabendatei",

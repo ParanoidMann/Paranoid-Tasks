@@ -110,7 +110,7 @@
 	"settings.boardIconDesc": "Icon in the left ribbon and on the board tab. Start typing to search icons (lucide.dev names work).",
 
 	"settings.storage": "Storage",
-	"settings.storageDesc": "Where the task list and details notes are kept. Changing these only switches the board to another file; existing files are not moved. A missing file is created.",
+	"settings.storageDesc": "Where the task list and details notes are kept. Changing these only switches the board to another file; existing files are not moved. If the file already exists, the columns are taken from it. A missing file is created.",
 	"settings.taskFolder": "Task folder",
 	"settings.taskFolderDesc": "Vault folder for the task file and new details notes. Empty means the vault root.",
 	"settings.taskFile": "Task file",

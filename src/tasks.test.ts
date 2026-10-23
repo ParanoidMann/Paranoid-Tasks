@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	addTask,
 	clearSection,
+	columnsInList,
 	daysUntil,
 	deleteTask,
 	clearPriority,
@@ -74,6 +75,17 @@ describe("normalize", () => {
 		expect(result.sections.map((s) => s.title)).toEqual(["Doing", "Done", "Notes", "Remove"]);
 		expect(getItems(result, "done")).toEqual(["d"]);
 		expect(getItems(result, "Remove")).toEqual(["r"]);
+	});
+});
+
+describe("columnsInList", () => {
+	it("takes section headings in file order, skipping Remove", () => {
+		const list = parse("Intro\n## Задачи\n- a\n## Remove\n- r\n## В работе\n## Готово\n- b\n");
+		expect(columnsInList(list)).toEqual(["Задачи", "В работе", "Готово"]);
+	});
+
+	it("returns nothing for a file without sections", () => {
+		expect(columnsInList(parse("Just text\n"))).toEqual([]);
 	});
 });
 

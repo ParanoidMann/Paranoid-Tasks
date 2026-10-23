@@ -113,6 +113,16 @@ function validateName(
 	return null;
 }
 
+/** Column names laid out in a task file: its section headings in order, without Remove and invalid names. */
+export function columnsInList(list: TaskList): string[] {
+	const columns: string[] = [];
+	for (const { title } of list.sections) {
+		const name = sanitize(title);
+		if (validateColumnName(name, columns, -1) === null) columns.push(name);
+	}
+	return columns;
+}
+
 /** Returns an error message, or null if `name` is a valid new name for column `index` (-1 for a new column). */
 export function validateColumnName(name: string, columns: string[], index: number): string | null {
 	if (sameTitle(name, REMOVE_SECTION)) return t("error.reserved", { name: REMOVE_SECTION });
