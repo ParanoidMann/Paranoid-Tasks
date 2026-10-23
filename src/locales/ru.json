@@ -25,7 +25,7 @@
 	"board.clearTitle": "Очистить убранные задачи?",
 	"board.clearMessage": "Все убранные задачи ({count}) будут удалены из файла задач.",
 	"board.clearDetails": "Их заметки с деталями ({count}) будут перемещены в корзину.",
-	"board.newTaskTitle": "Новая задача в «{column}»",
+	"board.newTaskTitle": "Новая задача",
 	"board.editTaskTitle": "Редактирование задачи",
 	"board.deadline": "Срок: {date}",
 	"board.menuEdit": "Редактировать",

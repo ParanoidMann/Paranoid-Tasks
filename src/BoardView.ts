@@ -274,7 +274,7 @@ export class BoardView extends ItemView {
 			});
 			setIcon(addButton, "plus");
 			addButton.addEventListener("click", () => {
-				this.openTaskModal(t("board.newTaskTitle", { column: title }), "", (l, line) => addTask(l, section, line));
+				this.openTaskModal(t("board.newTaskTitle"), "", (l, line) => addTask(l, section, line));
 			});
 		}
 

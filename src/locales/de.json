@@ -25,7 +25,7 @@
 	"board.clearTitle": "Entfernte Aufgaben leeren?",
 	"board.clearMessage": "Alle entfernten Aufgaben ({count}) werden aus der Aufgabendatei gelöscht.",
 	"board.clearDetails": "Ihre Detailnotizen ({count}) werden in den Papierkorb verschoben.",
-	"board.newTaskTitle": "Neue Aufgabe in „{column}“",
+	"board.newTaskTitle": "Neue Aufgabe",
 	"board.editTaskTitle": "Aufgabe bearbeiten",
 	"board.deadline": "Fällig: {date}",
 	"board.menuEdit": "Bearbeiten",

@@ -384,6 +384,21 @@
 	padding: 10px 14px;
 }
 
+/* Larger dialog titles ("New Task", "Edit Task", "Delete Task?"...). */
+.is-phone .paranoid-task-modal .modal-title,
+.is-phone .paranoid-confirm-modal .modal-title {
+	font-size: calc(var(--font-ui-large) * 1.2);
+}
+
+/* The "Task text" label: centered and larger, set apart from the fields above by space. */
+.is-phone .paranoid-task-modal .paranoid-modal-label {
+	margin-top: 24px;
+	margin-bottom: 12px;
+	text-align: center;
+	font-size: var(--font-ui-large);
+	font-weight: var(--font-semibold);
+}
+
 /* Phones: Obsidian centers modals in the full screen height, so the on-screen keyboard covers the
    lower half of the dialog. Obsidian sets --keyboard-height while the keyboard is open; end the
    container above it and let the dialog shrink (its content scrolls). */
