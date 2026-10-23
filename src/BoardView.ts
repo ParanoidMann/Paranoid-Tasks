@@ -116,6 +116,26 @@ export class BoardView extends ItemView {
 		this.registerEvent(this.app.vault.on("delete", onNoteChange));
 		this.registerEvent(this.app.vault.on("rename", onNoteChange));
 
+		if (Platform.isMobile) {
+			// During a sideways swipe Obsidian sets overflow-y: hidden on scroll containers and restores it
+			// when the touch ends, but it learns that from a "touchend" on window. If the board redraws
+			// mid-touch (Main.md changed), the touched card is gone, its touchend never reaches window, and
+			// the board stays unscrollable (pulling down then opens Obsidian's pull action). A new touch
+			// means the previous one is over, so clear what Obsidian left; capture runs before its handler.
+			this.registerDomEvent(
+				this.contentEl,
+				"touchstart",
+				(e) => {
+					if (e.touches.length !== 1) return;
+					const style = this.contentEl.style;
+					style.overflowY = "";
+					style.overscrollBehaviorX = "";
+					style.scrollbarGutter = "";
+				},
+				{ capture: true, passive: true },
+			);
+		}
+
 		try {
 			await ensureTaskFile(this.app, this.plugin.columnNames());
 		} catch (e) {
@@ -187,10 +207,11 @@ export class BoardView extends ItemView {
 
 	/**
 	 * Lets the column be reordered by dragging its header (or the whole strip
-	 * when collapsed), unless disabled in settings.
+	 * when collapsed), unless disabled in settings. Not on mobile: a native drag started by a touch
+	 * that does not end cleanly can leave iOS unable to scroll until Obsidian is restarted.
 	 */
 	private setupColumnDrag(column: HTMLElement, index: number): void {
-		if (!this.plugin.settings.columnDrag) return;
+		if (!this.plugin.settings.columnDrag || Platform.isMobile) return;
 		const handle = column.hasClass("is-collapsed")
 			? column
 			: column.querySelector<HTMLElement>(".paranoid-column-header");
@@ -416,7 +437,7 @@ export class BoardView extends ItemView {
 		this.cardMenus.set(card, (position) => this.showCardMenu(position, section, index, text, edit));
 		if (Platform.isMobile) {
 			// Reset on every touch: a long press is not always followed by a click.
-			card.addEventListener("touchstart", () => (longPressed = false));
+			card.addEventListener("touchstart", () => (longPressed = false), { passive: true });
 			this.onLongPress(card, (x, y) => {
 				longPressed = true;
 				this.showCardMenu({ x, y }, section, index, text, edit);
@@ -439,31 +460,54 @@ export class BoardView extends ItemView {
 	}
 
 	/**
-	 * Calls `onPress` with the touch position when a finger rests on `el` without moving.
-	 * Hand-made because iOS does not fire "contextmenu" on a long press.
+	 * Calls `onPress` with the touch position after a finger rests on `el` without moving and is then
+	 * lifted; `el` gets "is-long-pressed" once the press is long enough. Hand-made because iOS does not
+	 * fire "contextmenu" on a long press. The menu opens only after the finger is lifted: opened in the
+	 * middle of a touch, Obsidian's mobile menu sheet could leave the board unable to scroll.
 	 */
 	private onLongPress(el: HTMLElement, onPress: (x: number, y: number) => void): void {
 		let timer: number | null = null;
+		let ready = false;
 		let start = { x: 0, y: 0 };
-		const cancel = () => {
+		const reset = () => {
 			if (timer !== null) window.clearTimeout(timer);
 			timer = null;
+			ready = false;
+			el.removeClass("is-long-pressed");
 		};
-		el.addEventListener("touchstart", (e) => {
-			if (e.touches.length !== 1) return cancel();
-			start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-			cancel();
-			timer = window.setTimeout(() => {
-				timer = null;
-				onPress(start.x, start.y);
-			}, LONG_PRESS_MS);
+		// Passive: these never block scrolling.
+		el.addEventListener(
+			"touchstart",
+			(e) => {
+				reset();
+				if (e.touches.length !== 1) return;
+				start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+				timer = window.setTimeout(() => {
+					timer = null;
+					ready = true;
+					el.addClass("is-long-pressed");
+				}, LONG_PRESS_MS);
+			},
+			{ passive: true },
+		);
+		el.addEventListener(
+			"touchmove",
+			(e) => {
+				const touch = e.touches[0];
+				if (touch && Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > LONG_PRESS_SLOP_PX) reset();
+			},
+			{ passive: true },
+		);
+		// Not passive: a completed long press cancels the click that would follow, which could
+		// otherwise land on the menu that has just opened under the finger.
+		el.addEventListener("touchend", (e) => {
+			const open = ready;
+			reset();
+			if (!open) return;
+			e.preventDefault();
+			onPress(start.x, start.y);
 		});
-		el.addEventListener("touchmove", (e) => {
-			const touch = e.touches[0];
-			if (touch && Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > LONG_PRESS_SLOP_PX) cancel();
-		});
-		el.addEventListener("touchend", cancel);
-		el.addEventListener("touchcancel", cancel);
+		el.addEventListener("touchcancel", reset, { passive: true });
 		// Android also fires "contextmenu" on a long press; the menu above replaces it.
 		el.addEventListener("contextmenu", (e) => e.preventDefault());
 	}

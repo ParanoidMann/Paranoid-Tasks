@@ -130,8 +130,11 @@
 	text-align: center;
 }
 
-.paranoid-card:hover {
-	border-color: var(--interactive-accent);
+/* Only for real pointers: on touch screens a hover outline sticks to whatever was touched last. */
+@media (hover: hover) {
+	.paranoid-card:hover {
+		border-color: var(--interactive-accent);
+	}
 }
 
 .paranoid-card.is-dragging {
@@ -456,6 +459,12 @@
 .is-mobile .paranoid-card {
 	-webkit-touch-callout: none;
 	user-select: none;
+}
+
+/* Held long enough: lifting the finger opens the card menu. */
+.is-mobile .paranoid-card.is-long-pressed {
+	border-color: var(--interactive-accent);
+	background-color: var(--background-modifier-hover);
 }
 
 .is-mobile .paranoid-remove-zone {
