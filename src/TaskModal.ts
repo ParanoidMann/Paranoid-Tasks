@@ -1,4 +1,4 @@
-import { App, ButtonComponent, Modal, Notice, Setting, TextComponent } from "obsidian";
+import { App, ButtonComponent, Modal, Notice, Platform, Setting, TextComponent } from "obsidian";
 import { ConfirmModal } from "./ConfirmModal";
 import { hapticTap } from "./haptics";
 import { t, TranslationKey } from "./i18n";
@@ -155,8 +155,11 @@ export class TaskModal extends Modal {
 		new ButtonComponent(right).setButtonText(t("common.cancel")).onClick(() => this.close());
 
 		this.renderDetails();
-		this.input.focus();
-		this.input.setSelectionRange(this.input.value.length, this.input.value.length);
+		// On mobile, focusing pops up the keyboard; let the user tap the input instead.
+		if (!Platform.isMobile) {
+			this.input.focus();
+			this.input.setSelectionRange(this.input.value.length, this.input.value.length);
+		}
 	}
 
 	onClose(): void {
