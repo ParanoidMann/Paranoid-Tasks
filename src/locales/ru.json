@@ -28,6 +28,9 @@
 	"board.newTaskTitle": "Новая задача в «{column}»",
 	"board.editTaskTitle": "Редактирование задачи",
 	"board.deadline": "Срок: {date}",
+	"board.menuEdit": "Редактировать",
+	"board.menuMoveTo": "Переместить в «{column}»",
+	"board.menuRemove": "Убрать",
 	"board.markDone": "Отметить выполненной",
 
 	"modal.priority": "Приоритет",

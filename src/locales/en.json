@@ -28,6 +28,9 @@
 	"board.newTaskTitle": "New task in {column}",
 	"board.editTaskTitle": "Edit task",
 	"board.deadline": "Due {date}",
+	"board.menuEdit": "Edit",
+	"board.menuMoveTo": "Move to \"{column}\"",
+	"board.menuRemove": "Remove",
 	"board.markDone": "Mark as done",
 
 	"modal.priority": "Priority",

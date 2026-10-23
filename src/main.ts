@@ -92,6 +92,17 @@ export default class ParanoidTasksPlugin extends Plugin {
 		await this.updateSettings({ taskFolder: folder, taskFile: file, columns });
 	}
 
+	/**
+	 * Dev helper, console only: opens the mobile long-press menu on the desktop, for the n-th card
+	 * of an open board or for a card element (e.g. `$0` picked in DevTools).
+	 * `app.plugins.plugins["paranoid-tasks"].devCardMenu(0)`
+	 */
+	devCardMenu(target: number | HTMLElement = 0): boolean {
+		return this.app.workspace
+			.getLeavesOfType(VIEW_TYPE_BOARD)
+			.some((leaf) => leaf.view instanceof BoardView && leaf.view.openCardMenu(target));
+	}
+
 	/** Board title: the custom name, or the default one in the current language. */
 	boardTitle(): string {
 		return this.settings.boardName || t("board.defaultName");

@@ -427,3 +427,14 @@
 .is-phone .paranoid-column.is-drop-after {
 	box-shadow: 0 3px 0 var(--interactive-accent);
 }
+
+/* Mobile: a long press on a card opens its menu, so it must not select text or show the system callout.
+   Cards are not dragged there, so the drop-to-remove zone is not shown either. */
+.is-mobile .paranoid-card {
+	-webkit-touch-callout: none;
+	user-select: none;
+}
+
+.is-mobile .paranoid-remove-zone {
+	display: none;
+}

@@ -28,6 +28,9 @@
 	"board.newTaskTitle": "Neue Aufgabe in „{column}“",
 	"board.editTaskTitle": "Aufgabe bearbeiten",
 	"board.deadline": "Fällig: {date}",
+	"board.menuEdit": "Bearbeiten",
+	"board.menuMoveTo": "Nach „{column}“ verschieben",
+	"board.menuRemove": "Entfernen",
 	"board.markDone": "Als erledigt markieren",
 
 	"modal.priority": "Priorität",
