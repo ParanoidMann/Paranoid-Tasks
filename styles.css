@@ -419,6 +419,14 @@
 	min-height: 0;
 }
 
+/* Room at the end of the board so the last cards can scroll above Obsidian's bottom navigation bar,
+   like Obsidian's own views do. A spacer element, since bottom padding of a scroll container is not
+   always scrollable. */
+.is-phone .paranoid-board::after {
+	content: "";
+	flex: 0 0 var(--view-bottom-spacing, 0px);
+}
+
 /* A collapsed column is a full-width strip with a horizontal title. */
 .is-phone .paranoid-column.is-collapsed {
 	width: auto;
