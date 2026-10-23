@@ -393,7 +393,7 @@ export class BoardView extends ItemView {
 			setIcon(icon, "file-text");
 			icon.addEventListener("click", (e) => {
 				e.stopPropagation();
-				if (!missing) void openDetails(this.app, details);
+				if (!missing) void openDetails(this.app, details, this.leaf);
 			});
 		}
 
@@ -633,7 +633,7 @@ export class BoardView extends ItemView {
 				break;
 		}
 
-		if (open && details) await openDetails(this.app, details);
+		if (open && details) await openDetails(this.app, details, this.leaf);
 	}
 
 	/** `dragOnly`: hidden by CSS until a card drag adds "is-dragging-card" to the board. */

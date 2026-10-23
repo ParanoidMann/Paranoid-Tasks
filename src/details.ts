@@ -1,4 +1,4 @@
-import { App, TFile } from "obsidian";
+import { App, Platform, TFile, WorkspaceLeaf } from "obsidian";
 import { ensureTaskFile, taskFileName, taskFilePath, taskFolder } from "./taskStore";
 import { t } from "./i18n";
 import { sameTitle } from "./tasks";
@@ -39,6 +39,12 @@ export async function trashDetails(app: App, file: TFile): Promise<void> {
 	await app.fileManager.trashFile(file);
 }
 
-export async function openDetails(app: App, name: string): Promise<void> {
-	await app.workspace.openLinkText(name, taskFilePath(), "tab");
+/**
+ * Opens a details note in a new tab. On mobile it replaces the board in `boardLeaf` instead:
+ * tabs are awkward there, and this way Obsidian's back button returns to the board.
+ */
+export async function openDetails(app: App, name: string, boardLeaf: WorkspaceLeaf): Promise<void> {
+	const file = resolveDetails(app, name);
+	if (Platform.isMobile && file) await boardLeaf.openFile(file);
+	else await app.workspace.openLinkText(name, taskFilePath(), "tab");
 }
