@@ -34,10 +34,10 @@
 	"modal.text": "Текст задачи",
 	"modal.deadline": "Дедлайн",
 	"modal.clearDeadline": "Убрать дедлайн",
-	"modal.repeat": "Повторяющаяся задача",
-	"modal.repeatEvery": "Как часто",
+	"modal.repeatEvery": "Повторять",
 	"modal.repeatDay": "Число месяца (в коротких месяцах берётся последний день)",
 
+	"repeat.never": "Никогда",
 	"repeat.hourly": "Каждый час",
 	"repeat.daily": "Каждый день",
 	"repeat.dailyAt": "Каждый день в…",

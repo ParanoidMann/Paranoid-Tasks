@@ -34,10 +34,10 @@
 	"modal.text": "Aufgabentext",
 	"modal.deadline": "Frist",
 	"modal.clearDeadline": "Frist entfernen",
-	"modal.repeat": "Wiederkehrende Aufgabe",
-	"modal.repeatEvery": "Wie oft",
+	"modal.repeatEvery": "Wiederholen",
 	"modal.repeatDay": "Tag des Monats (in kürzeren Monaten wird der letzte Tag verwendet)",
 
+	"repeat.never": "Nie",
 	"repeat.hourly": "Jede Stunde",
 	"repeat.daily": "Jeden Tag",
 	"repeat.dailyAt": "Jeden Tag um…",

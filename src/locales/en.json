@@ -34,10 +34,10 @@
 	"modal.text": "Task text",
 	"modal.deadline": "Deadline",
 	"modal.clearDeadline": "Clear deadline",
-	"modal.repeat": "Recurring task",
-	"modal.repeatEvery": "How often",
+	"modal.repeatEvery": "Repeat",
 	"modal.repeatDay": "Day of the month (the last day is used in shorter months)",
 
+	"repeat.never": "Never",
 	"repeat.hourly": "Every hour",
 	"repeat.daily": "Every day",
 	"repeat.dailyAt": "Every day at…",

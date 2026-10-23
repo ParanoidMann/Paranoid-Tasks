@@ -66,3 +66,4 @@ export async function updateTasks(
 	const file = await ensureTaskFile(app, columns);
 	await app.vault.process(file, (data) => serialize(normalize(fn(parse(data)), columns)));
 }
+

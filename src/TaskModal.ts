@@ -184,29 +184,31 @@ export class TaskModal extends Modal {
 			);
 	}
 
-	/** "Recurring task" toggle and, when on, the frequency (with weekday/day and time for the "…at" options). */
+	/** Frequency ("Never" for a one-off task), with weekday/day and time for the "…at" options. */
 	private renderRepeat(): void {
 		const el = this.repeatEl;
 		if (!el) return;
 		el.empty();
 
-		new Setting(el).setName(t("modal.repeat")).addToggle((toggle) =>
-			toggle.setValue(this.repeat !== null).onChange((on) => {
-				this.repeat = on ? { kind: "daily" } : null;
-				this.renderRepeat();
-			}),
-		);
-		if (!this.repeat) return;
-
 		const rule = this.repeat;
-		const choice: RepeatChoice = !rule.time ? rule.kind : rule.kind === "daily" ? "dailyAt" : rule.kind === "weekly" ? "weeklyAt" : "monthlyAt";
+		const choice: RepeatChoice | "never" = !rule
+			? "never"
+			: !rule.time
+				? rule.kind
+				: rule.kind === "daily"
+					? "dailyAt"
+					: rule.kind === "weekly"
+						? "weeklyAt"
+						: "monthlyAt";
 		const setting = new Setting(el).setName(t("modal.repeatEvery")).addDropdown((dropdown) => {
+			dropdown.addOption("never", t("repeat.never"));
 			for (const option of REPEAT_CHOICES) dropdown.addOption(option, t(`repeat.${option}`));
 			dropdown.setValue(choice).onChange((value) => {
-				this.repeat = defaultRule(value as RepeatChoice);
+				this.repeat = value === "never" ? null : defaultRule(value as RepeatChoice);
 				this.renderRepeat();
 			});
 		});
+		if (!rule) return;
 
 		if (choice === "weeklyAt") {
 			setting.addDropdown((dropdown) => {
