@@ -109,7 +109,7 @@ export class TaskModal extends Modal {
 		this.modalEl.addClass("paranoid-task-modal");
 		// Phones: the container stops above the on-screen keyboard (see styles.css); once the keyboard
 		// is shown, scroll the focused field back into view.
-		this.containerEl.addClass("paranoid-task-modal-container");
+		this.containerEl.addClasses(["paranoid-modal-container", "paranoid-task-modal-container"]);
 		window.addEventListener("keyboardDidShow", this.onKeyboardShown);
 		// Compact label/control rows (styled in styles.css), then the task text below.
 		// Rows can be hidden in settings; then their current values are saved unchanged.

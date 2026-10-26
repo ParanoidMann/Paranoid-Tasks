@@ -17,6 +17,7 @@ export class ConfirmModal extends Modal {
 	onOpen(): void {
 		this.titleEl.setText(this.options.title);
 		this.modalEl.addClass("paranoid-confirm-modal");
+		this.containerEl.addClass("paranoid-modal-container");
 		this.contentEl.createEl("p", { text: this.options.message });
 		new Setting(this.contentEl)
 			.addButton((b) =>

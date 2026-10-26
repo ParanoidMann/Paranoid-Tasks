@@ -403,6 +403,12 @@
 	font-weight: var(--font-semibold);
 }
 
+/* Mobile: Obsidian lightens the cover behind modals to rgba(0, 0, 0, 0.15) (desktop: 0.4), so the
+   board shows through too much behind the task and confirmation dialogs. Dim it as on desktop. */
+.is-mobile .modal-container.paranoid-modal-container {
+	--background-modifier-cover: rgba(0, 0, 0, 0.5);
+}
+
 /* Phones: Obsidian centers modals in the full screen height, so the on-screen keyboard covers the
    lower half of the dialog. Obsidian sets --keyboard-height while the keyboard is open; end the
    container above it and let the dialog shrink (its content scrolls). */
