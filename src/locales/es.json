@@ -27,6 +27,7 @@
 	"board.clearDetails": "Sus notas de detalles ({count}) se moverán a la papelera.",
 	"board.newTaskTitle": "Nueva tarea",
 	"board.editTaskTitle": "Editar tarea",
+	"board.duplicateTaskTitle": "Duplicar tarea",
 	"board.deadline": "Vence: {date}",
 	"board.menuEdit": "Editar",
 	"board.menuMoveTo": "Mover a «{column}»",
@@ -78,6 +79,7 @@
 	"modal.deleteDetailsMessage": "La nota «{name}» se moverá a la papelera al guardar la tarea.",
 	"modal.deleteTaskTitle": "¿Eliminar tarea?",
 	"modal.deleteTaskMessage": "La tarea se eliminará del archivo de tareas.",
+	"modal.duplicateTask": "Duplicar tarea",
 	"modal.deleteTaskDetails": "Su nota de detalles «{name}» se moverá a la papelera.",
 
 	"error.columnNameEmpty": "El nombre de la columna está vacío",

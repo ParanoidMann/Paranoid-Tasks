@@ -53,6 +53,11 @@ export interface TaskModalOptions {
 	 * Throwing keeps the modal open and shows the error.
 	 */
 	onDelete?: () => Promise<void>;
+	/**
+	 * Starts a duplicate of the task from the current field values (only for existing tasks;
+	 * no Duplicate button otherwise). Called after this modal closes.
+	 */
+	onDuplicate?: (draft: Omit<TaskModalResult, "details">) => void;
 	/** Extra line for the delete confirmation, e.g. that the details note goes to trash. */
 	deleteNote?: string;
 }
@@ -135,17 +140,27 @@ export class TaskModal extends Modal {
 			}
 		});
 
-		// Footer: Delete on the left (existing tasks only), Save/Cancel on the right.
+		// Footer: Delete and Duplicate icons on the left (existing tasks only), Save/Cancel on the right.
 		const footer = this.contentEl.createDiv({ cls: "paranoid-modal-footer" });
-		const left = footer.createDiv();
+		const left = footer.createDiv({ cls: "paranoid-modal-footer-left" });
 		const right = footer.createDiv({ cls: "paranoid-modal-footer-right" });
-		const { onDelete } = this.options;
+		const { onDelete, onDuplicate } = this.options;
 		if (onDelete) {
 			new ButtonComponent(left)
-				.setButtonText(t("common.delete"))
+				.setIcon("trash-2")
+				.setTooltip(t("common.delete"))
 				.onClick(() => {
 					hapticTap();
 					this.confirmDelete(onDelete);
+				});
+		}
+		if (onDuplicate) {
+			new ButtonComponent(left)
+				.setIcon("copy-plus")
+				.setTooltip(t("modal.duplicateTask"))
+				.onClick(() => {
+					hapticTap();
+					this.duplicate(onDuplicate);
 				});
 		}
 		new ButtonComponent(right)
@@ -350,6 +365,18 @@ export class TaskModal extends Modal {
 				})();
 			},
 		}).open();
+	}
+
+	/** Closes without saving and hands the current field values over for the duplicate. */
+	private duplicate(onDuplicate: (draft: Omit<TaskModalResult, "details">) => void): void {
+		const draft = {
+			text: sanitize(this.input.value),
+			priority: this.priority,
+			deadline: this.deadline,
+			repeat: this.repeat ? formatRepeat(this.repeat) : null,
+		};
+		this.close();
+		onDuplicate(draft);
 	}
 
 	private detailsAction(): DetailsAction {

@@ -7,6 +7,7 @@ import {
 	editTask,
 	formatTask,
 	getItems,
+	insertTaskAfter,
 	moveTask,
 	parseTask,
 	ARCHIVE_SECTION,
@@ -425,6 +426,7 @@ export class BoardView extends ItemView {
 				text,
 				(l, line) => editTask(l, section, index, text, line),
 				() => this.deleteTask(section, index, text),
+				(raw) => this.openTaskModal(t("board.duplicateTaskTitle"), raw, (l, line) => insertTaskAfter(l, section, index, text, line)),
 			);
 		let longPressed = false;
 		card.addEventListener("click", () => {
@@ -572,6 +574,7 @@ export class BoardView extends ItemView {
 		raw: string,
 		apply: (list: TaskList, line: string) => TaskList,
 		remove?: () => Promise<void>,
+		duplicate?: (raw: string) => void,
 	): void {
 		const task = parseTask(raw);
 		const priorities = this.plugin.settings.priorities;
@@ -597,6 +600,13 @@ export class BoardView extends ItemView {
 			startWithDetails: raw === "" && this.plugin.settings.detailsByDefault && this.plugin.settings.dialogDetails,
 			onSubmit: (result, open) => this.saveTask(task, result, open, apply),
 			onDelete: remove,
+			// The duplicate gets no details: two tasks sharing one note would trash it for each other.
+			onDuplicate: duplicate
+				? (draft) => {
+						const priority = sameTitle(draft.priority, priorities[0].name) ? null : draft.priority;
+						duplicate(formatTask({ ...draft, priority, done: null, details: null }));
+					}
+				: undefined,
 			deleteNote: trashesDetails ? t("modal.deleteTaskDetails", { name: task.details ?? "" }) : undefined,
 		}).open();
 	}

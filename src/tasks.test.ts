@@ -11,6 +11,7 @@ import {
 	escalatePriorities,
 	formatTask,
 	getItems,
+	insertTaskAfter,
 	mergeSection,
 	moveTask,
 	normalize,
@@ -470,5 +471,18 @@ describe("weekly and monthly rules with a time", () => {
 		expect(start("monthly 31 09:00", new Date(2026, 1, 28, 10, 0))).toEqual(new Date(2026, 1, 28, 9, 0));
 		expect(start("monthly 31 09:00", new Date(2026, 2, 15))).toEqual(new Date(2026, 1, 28, 9, 0));
 		expect(start("monthly 10 09:00", new Date(2026, 0, 5))).toEqual(new Date(2025, 11, 10, 9, 0));
+	});
+});
+
+describe("insertTaskAfter", () => {
+	const list = parse(sample);
+
+	it("inserts right after the anchor, found by index or text", () => {
+		expect(getItems(insertTaskAfter(list, "Open", 0, "a", "a2"), "Open")).toEqual(["a", "a2", "b", "c"]);
+		expect(getItems(insertTaskAfter(list, "Open", 0, "b", "b2"), "Open")).toEqual(["a", "b", "b2", "c"]);
+	});
+
+	it("appends when the anchor is gone", () => {
+		expect(getItems(insertTaskAfter(list, "Open", 0, "missing", "x"), "Open")).toEqual(["a", "b", "c", "x"]);
 	});
 });

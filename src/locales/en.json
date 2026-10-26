@@ -27,6 +27,7 @@
 	"board.clearDetails": "Their details notes ({count}) will be moved to trash.",
 	"board.newTaskTitle": "New Task",
 	"board.editTaskTitle": "Edit Task",
+	"board.duplicateTaskTitle": "Duplicate Task",
 	"board.deadline": "Due {date}",
 	"board.menuEdit": "Edit",
 	"board.menuMoveTo": "Move to \"{column}\"",
@@ -78,6 +79,7 @@
 	"modal.deleteDetailsMessage": "The note \"{name}\" will be moved to trash when you save the task.",
 	"modal.deleteTaskTitle": "Delete Task?",
 	"modal.deleteTaskMessage": "The task will be deleted from the task file.",
+	"modal.duplicateTask": "Duplicate task",
 	"modal.deleteTaskDetails": "Its details note \"{name}\" will be moved to trash.",
 
 	"error.columnNameEmpty": "Column name is empty",

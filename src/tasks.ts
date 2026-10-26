@@ -465,6 +465,21 @@ export function addTask(list: TaskList, section: string, text: string): TaskList
 	return result;
 }
 
+/** Inserts a task right after `anchorText`; appends it to the section if the anchor is gone. */
+export function insertTaskAfter(
+	list: TaskList,
+	section: string,
+	index: number,
+	anchorText: string,
+	text: string,
+): TaskList {
+	const result = clone(list);
+	const items = getOrCreateSection(result, section).items;
+	const i = locate(items, index, anchorText);
+	items.splice(i === -1 ? items.length : i + 1, 0, text);
+	return result;
+}
+
 export function editTask(
 	list: TaskList,
 	section: string,

@@ -271,6 +271,7 @@
 	margin-top: 12px;
 }
 
+.paranoid-modal-footer-left,
 .paranoid-modal-footer-right {
 	display: flex;
 	gap: 8px;

@@ -27,6 +27,7 @@
 	"board.clearDetails": "Leurs notes de détails ({count}) seront placées dans la corbeille.",
 	"board.newTaskTitle": "Nouvelle tâche",
 	"board.editTaskTitle": "Modifier la tâche",
+	"board.duplicateTaskTitle": "Dupliquer la tâche",
 	"board.deadline": "Échéance : {date}",
 	"board.menuEdit": "Modifier",
 	"board.menuMoveTo": "Déplacer vers « {column} »",
@@ -78,6 +79,7 @@
 	"modal.deleteDetailsMessage": "La note « {name} » sera placée dans la corbeille à l'enregistrement de la tâche.",
 	"modal.deleteTaskTitle": "Supprimer la tâche ?",
 	"modal.deleteTaskMessage": "La tâche sera supprimée du fichier de tâches.",
+	"modal.duplicateTask": "Dupliquer la tâche",
 	"modal.deleteTaskDetails": "Sa note de détails « {name} » sera placée dans la corbeille.",
 
 	"error.columnNameEmpty": "Le nom de la colonne est vide",

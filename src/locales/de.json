@@ -27,6 +27,7 @@
 	"board.clearDetails": "Ihre Detailnotizen ({count}) werden in den Papierkorb verschoben.",
 	"board.newTaskTitle": "Neue Aufgabe",
 	"board.editTaskTitle": "Aufgabe bearbeiten",
+	"board.duplicateTaskTitle": "Aufgabe duplizieren",
 	"board.deadline": "Fällig: {date}",
 	"board.menuEdit": "Bearbeiten",
 	"board.menuMoveTo": "Nach „{column}“ verschieben",
@@ -78,6 +79,7 @@
 	"modal.deleteDetailsMessage": "Die Notiz „{name}“ wird beim Speichern der Aufgabe in den Papierkorb verschoben.",
 	"modal.deleteTaskTitle": "Aufgabe löschen?",
 	"modal.deleteTaskMessage": "Die Aufgabe wird aus der Aufgabendatei gelöscht.",
+	"modal.duplicateTask": "Aufgabe duplizieren",
 	"modal.deleteTaskDetails": "Ihre Detailnotiz „{name}“ wird in den Papierkorb verschoben.",
 
 	"error.columnNameEmpty": "Der Spaltenname ist leer",

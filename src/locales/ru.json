@@ -27,6 +27,7 @@
 	"board.clearDetails": "Их заметки с деталями ({count}) будут перемещены в корзину.",
 	"board.newTaskTitle": "Новая задача",
 	"board.editTaskTitle": "Редактирование задачи",
+	"board.duplicateTaskTitle": "Дубликат задачи",
 	"board.deadline": "Срок: {date}",
 	"board.menuEdit": "Редактировать",
 	"board.menuMoveTo": "Переместить в «{column}»",
@@ -78,6 +79,7 @@
 	"modal.deleteDetailsMessage": "Заметка «{name}» будет перемещена в корзину при сохранении задачи.",
 	"modal.deleteTaskTitle": "Удалить задачу?",
 	"modal.deleteTaskMessage": "Задача будет удалена из файла задач.",
+	"modal.duplicateTask": "Дублировать задачу",
 	"modal.deleteTaskDetails": "Заметка с деталями «{name}» будет перемещена в корзину.",
 
 	"error.columnNameEmpty": "Название столбца пустое",
