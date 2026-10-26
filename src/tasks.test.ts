@@ -40,7 +40,7 @@ const sample = `## Open
 ## Done
 - d
 
-## Remove
+## Archive
 - e
 `;
 
@@ -54,7 +54,7 @@ describe("parse / serialize", () => {
 	});
 
 	it("parses sections and items", () => {
-		expect(items(parse(sample))).toEqual({ Open: ["a", "b", "c"], Done: ["d"], Remove: ["e"] });
+		expect(items(parse(sample))).toEqual({ Open: ["a", "b", "c"], Done: ["d"], Archive: ["e"] });
 	});
 
 	it("keeps preamble and unknown sections, accepts CRLF, merges duplicates", () => {
@@ -63,24 +63,29 @@ describe("parse / serialize", () => {
 		expect(items(list)).toEqual({ open: ["x", "y"], Notes: ["kept"] });
 	});
 
-	it("serializes an empty list with configured columns and Remove", () => {
-		expect(serialize(normalize(emptyList(), COLUMNS))).toBe("## Open\n\n## Done\n\n## Remove\n");
+	it("serializes an empty list with configured columns and Archive", () => {
+		expect(serialize(normalize(emptyList(), COLUMNS))).toBe("## Open\n\n## Done\n\n## Archive\n");
+	});
+
+	it("reads the legacy Remove section as Archive", () => {
+		const list = parse("## Open\n- a\n## Remove\n- r\n## Archive\n- s\n");
+		expect(serialize(normalize(list, ["Open"]))).toBe("## Open\n- a\n\n## Archive\n- r\n- s\n");
 	});
 });
 
 describe("normalize", () => {
-	it("orders configured columns, then other sections, then Remove; uses configured titles", () => {
-		const list = parse("## remove\n- r\n## Notes\n- n\n## done\n- d\n");
+	it("orders configured columns, then other sections, then Archive; uses configured titles", () => {
+		const list = parse("## archive\n- r\n## Notes\n- n\n## done\n- d\n");
 		const result = normalize(list, ["Doing", "Done"]);
-		expect(result.sections.map((s) => s.title)).toEqual(["Doing", "Done", "Notes", "Remove"]);
+		expect(result.sections.map((s) => s.title)).toEqual(["Doing", "Done", "Notes", "Archive"]);
 		expect(getItems(result, "done")).toEqual(["d"]);
-		expect(getItems(result, "Remove")).toEqual(["r"]);
+		expect(getItems(result, "Archive")).toEqual(["r"]);
 	});
 });
 
 describe("columnsInList", () => {
-	it("takes section headings in file order, skipping Remove", () => {
-		const list = parse("Intro\n## Задачи\n- a\n## Remove\n- r\n## В работе\n## Готово\n- b\n");
+	it("takes section headings in file order, skipping Archive", () => {
+		const list = parse("Intro\n## Задачи\n- a\n## Archive\n- r\n## В работе\n## Готово\n- b\n");
 		expect(columnsInList(list)).toEqual(["Задачи", "В работе", "Готово"]);
 	});
 
@@ -98,6 +103,7 @@ describe("sanitize", () => {
 describe("validateColumnName", () => {
 	it("rejects empty, reserved and duplicate names", () => {
 		expect(validateColumnName("", COLUMNS, -1)).not.toBeNull();
+		expect(validateColumnName("archive", COLUMNS, -1)).not.toBeNull();
 		expect(validateColumnName("remove", COLUMNS, -1)).not.toBeNull();
 		expect(validateColumnName("done", COLUMNS, -1)).not.toBeNull();
 		expect(validateColumnName("Doing", COLUMNS, -1)).toBeNull();
@@ -133,10 +139,10 @@ describe("task operations", () => {
 		expect(getItems(moveTask(list, "Open", 1, "b", "Open", 1), "Open")).toEqual(["a", "b", "c"]);
 	});
 
-	it("moves to Remove, clamping the index", () => {
-		const result = moveTask(list, "Done", 0, "d", "Remove", Number.MAX_SAFE_INTEGER);
+	it("moves to Archive, clamping the index", () => {
+		const result = moveTask(list, "Done", 0, "d", "Archive", Number.MAX_SAFE_INTEGER);
 		expect(getItems(result, "Done")).toEqual([]);
-		expect(getItems(result, "Remove")).toEqual(["e", "d"]);
+		expect(getItems(result, "Archive")).toEqual(["e", "d"]);
 	});
 
 	it("does not mutate the input", () => {
@@ -150,7 +156,7 @@ describe("section operations", () => {
 
 	it("renames a section keeping its tasks", () => {
 		const result = renameSection(list, "Done", "Finished");
-		expect(items(result)).toEqual({ Open: ["a", "b", "c"], Finished: ["d"], Remove: ["e"] });
+		expect(items(result)).toEqual({ Open: ["a", "b", "c"], Finished: ["d"], Archive: ["e"] });
 	});
 
 	it("merges into an existing section on rename", () => {
@@ -160,12 +166,12 @@ describe("section operations", () => {
 
 	it("merges a deleted column into another", () => {
 		const result = mergeSection(list, "Open", "Done");
-		expect(items(result)).toEqual({ Done: ["d", "a", "b", "c"], Remove: ["e"] });
+		expect(items(result)).toEqual({ Done: ["d", "a", "b", "c"], Archive: ["e"] });
 	});
 
 	it("deleting the only column recreates Open with all its tasks", () => {
-		const result = normalize(mergeSection(parse("## Todo\n- a\n## Remove\n"), "Todo", "Open"), ["Open"]);
-		expect(serialize(result)).toBe("## Open\n- a\n\n## Remove\n");
+		const result = normalize(mergeSection(parse("## Todo\n- a\n## Archive\n"), "Todo", "Open"), ["Open"]);
+		expect(serialize(result)).toBe("## Open\n- a\n\n## Archive\n");
 	});
 });
 
@@ -192,19 +198,19 @@ describe("priorities", () => {
 		expect(serialize(list)).toBe("## Open\n- [Priority: High] Задача с высоким приоритетом\n");
 	});
 
-	const list = parse("## Open\n- [Priority: High] a\n- [Priority: Low] b\n## Remove\n- [priority: high] c\n- d\n");
+	const list = parse("## Open\n- [Priority: High] a\n- [Priority: Low] b\n## Archive\n- [priority: high] c\n- d\n");
 
 	it("renames tags in all sections, case-insensitively", () => {
 		expect(items(renamePriority(list, "High", "Urgent"))).toEqual({
 			Open: ["[Priority: Urgent] a", "[Priority: Low] b"],
-			Remove: ["[Priority: Urgent] c", "d"],
+			Archive: ["[Priority: Urgent] c", "d"],
 		});
 	});
 
 	it("clears tags in all sections", () => {
 		expect(items(clearPriority(list, "High"))).toEqual({
 			Open: ["a", "[Priority: Low] b"],
-			Remove: ["c", "d"],
+			Archive: ["c", "d"],
 		});
 	});
 
@@ -317,7 +323,7 @@ describe("deadlines", () => {
 				"- [Priority: Low] [Deadline: 2026-10-23] own priority",
 				"- [Priority: Normal] [Deadline: 2026-10-23] explicit default",
 				"- no deadline",
-				"## Remove",
+				"## Archive",
 				"- [Deadline: 2026-10-23] removed",
 			].join("\n"),
 		);
@@ -330,7 +336,7 @@ describe("deadlines", () => {
 			"[Priority: High] [Deadline: 2026-10-23] explicit default",
 			"no deadline",
 		]);
-		expect(getItems(result, "Remove")).toEqual(["[Deadline: 2026-10-23] removed"]);
+		expect(getItems(result, "Archive")).toEqual(["[Deadline: 2026-10-23] removed"]);
 	});
 });
 
@@ -350,8 +356,8 @@ describe("deleteTask", () => {
 
 describe("clearSection", () => {
 	it("empties one section and keeps the others", () => {
-		const result = clearSection(parse(sample), "Remove");
-		expect(items(result)).toEqual({ Open: ["a", "b", "c"], Done: ["d"], Remove: [] });
+		const result = clearSection(parse(sample), "Archive");
+		expect(items(result)).toEqual({ Open: ["a", "b", "c"], Done: ["d"], Archive: [] });
 	});
 });
 
@@ -414,7 +420,7 @@ describe("recurring tasks", () => {
 				"- [Repeat: daily 09:00] [Done: 2026-10-22 08:59] before nine",
 				"- [Repeat: daily 09:00] [Done: 2026-10-22 09:00] after nine",
 				"- [Done: 2026-01-01 00:00] not recurring",
-				"## Remove",
+				"## Archive",
 				"- [Repeat: daily] [Done: 2026-10-01 10:00] removed",
 			].join("\n"),
 		);
@@ -427,7 +433,7 @@ describe("recurring tasks", () => {
 			"[Repeat: daily 09:00] [Done: 2026-10-22 09:00] after nine",
 			"[Done: 2026-01-01 00:00] not recurring",
 		]);
-		expect(getItems(result, "Remove")).toEqual(["[Repeat: daily] [Done: 2026-10-01 10:00] removed"]);
+		expect(getItems(result, "Archive")).toEqual(["[Repeat: daily] [Done: 2026-10-01 10:00] removed"]);
 	});
 });
 

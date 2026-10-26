@@ -3,7 +3,9 @@
 import { t, TranslationKey } from "./i18n";
 
 /** Service section: always present, always last, never shown on the board. */
-export const REMOVE_SECTION = "Remove";
+export const ARCHIVE_SECTION = "Archive";
+/** Former name of the Archive section; read as Archive and rewritten on the next save. */
+const LEGACY_ARCHIVE_SECTION = "Remove";
 /** Column created when the user deletes all columns. */
 export const DEFAULT_COLUMN = "Open";
 
@@ -53,7 +55,8 @@ export function parse(text: string): TaskList {
 		const heading = /^##\s+(.+?)\s*$/.exec(line);
 		if (heading) {
 			// Duplicate headings are merged into one section.
-			current = getOrCreateSection(list, heading[1]);
+			const title = sameTitle(heading[1], LEGACY_ARCHIVE_SECTION) ? ARCHIVE_SECTION : heading[1];
+			current = getOrCreateSection(list, title);
 			continue;
 		}
 		if (!current) {
@@ -72,16 +75,16 @@ export function parse(text: string): TaskList {
 
 /**
  * Orders sections as: configured columns (created if missing, titles taken
- * from settings), other sections found in the file, then Remove.
+ * from settings), other sections found in the file, then Archive.
  */
 export function normalize(list: TaskList, columns: string[]): TaskList {
 	const sections: Section[] = columns.map((title) => ({ title, items: [...getItems(list, title)] }));
 	for (const section of list.sections) {
-		if (sameTitle(section.title, REMOVE_SECTION)) continue;
+		if (sameTitle(section.title, ARCHIVE_SECTION)) continue;
 		if (columns.some((c) => sameTitle(c, section.title))) continue;
 		sections.push({ title: section.title, items: [...section.items] });
 	}
-	sections.push({ title: REMOVE_SECTION, items: [...getItems(list, REMOVE_SECTION)] });
+	sections.push({ title: ARCHIVE_SECTION, items: [...getItems(list, ARCHIVE_SECTION)] });
 	return { preamble: list.preamble, sections };
 }
 
@@ -113,7 +116,7 @@ function validateName(
 	return null;
 }
 
-/** Column names laid out in a task file: its section headings in order, without Remove and invalid names. */
+/** Column names laid out in a task file: its section headings in order, without Archive and invalid names. */
 export function columnsInList(list: TaskList): string[] {
 	const columns: string[] = [];
 	for (const { title } of list.sections) {
@@ -125,7 +128,9 @@ export function columnsInList(list: TaskList): string[] {
 
 /** Returns an error message, or null if `name` is a valid new name for column `index` (-1 for a new column). */
 export function validateColumnName(name: string, columns: string[], index: number): string | null {
-	if (sameTitle(name, REMOVE_SECTION)) return t("error.reserved", { name: REMOVE_SECTION });
+	for (const reserved of [ARCHIVE_SECTION, LEGACY_ARCHIVE_SECTION]) {
+		if (sameTitle(name, reserved)) return t("error.reserved", { name: reserved });
+	}
 	return validateName(name, columns, index, "error.columnNameEmpty", "error.columnExists");
 }
 
@@ -392,13 +397,13 @@ export function renameDetails(list: TaskList, oldNames: string[], newName: strin
 	});
 }
 
-/** Unchecks recurring tasks checked before the start of their current period. Tasks in Remove are left alone. */
+/** Unchecks recurring tasks checked before the start of their current period. Tasks in Archive are left alone. */
 export function resetRecurring(list: TaskList, now: Date): TaskList {
 	return {
 		preamble: list.preamble,
 		sections: list.sections.map((s) => ({
 			title: s.title,
-			items: sameTitle(s.title, REMOVE_SECTION)
+			items: sameTitle(s.title, ARCHIVE_SECTION)
 				? s.items
 				: s.items.map((raw) => {
 						const task = parseTask(raw);
@@ -413,7 +418,7 @@ export function resetRecurring(list: TaskList, now: Date): TaskList {
 
 /**
  * Gives `priority` to default-priority tasks whose deadline is at most `days`
- * days after `today` (overdue included). Tasks in Remove are left alone.
+ * days after `today` (overdue included). Tasks in Archive are left alone.
  */
 export function escalatePriorities(
 	list: TaskList,
@@ -426,7 +431,7 @@ export function escalatePriorities(
 		preamble: list.preamble,
 		sections: list.sections.map((s) => ({
 			title: s.title,
-			items: sameTitle(s.title, REMOVE_SECTION)
+			items: sameTitle(s.title, ARCHIVE_SECTION)
 				? s.items
 				: s.items.map((raw) => {
 						const task = parseTask(raw);

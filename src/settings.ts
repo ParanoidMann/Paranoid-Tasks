@@ -11,7 +11,7 @@ import {
 } from "obsidian";
 import { Language, LANGUAGES, t, TranslationKey } from "./i18n";
 import type ParanoidTasksPlugin from "./main";
-import { REMOVE_SECTION } from "./tasks";
+import { ARCHIVE_SECTION } from "./tasks";
 import { DEFAULT_TASK_FILE, DEFAULT_TASK_FOLDER } from "./taskStore";
 
 export interface Priority {
@@ -54,11 +54,11 @@ export interface ParanoidTasksSettings {
 	boardName: string;
 	/** Icon id of the board in the ribbon and the tab header. */
 	boardIcon: string;
-	/** Board columns in display order. Never contains Remove. */
+	/** Board columns in display order. Never contains Archive. */
 	columns: ColumnConfig[];
 	/** Whether columns can be reordered by dragging on the board. */
 	columnDrag: boolean;
-	/** When the Remove drop zone is shown on the board (the section stays in the file either way). */
+	/** When the Archive drop zone is shown on the board (the section stays in the file either way). */
 	removeZone: RemoveZoneMode;
 	/** Task priorities in dropdown order. The first one is the default and is not written to Main.md. */
 	priorities: Priority[];
@@ -415,7 +415,7 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName(t("settings.columns"))
-			.setDesc(t("settings.columnsDesc", { remove: REMOVE_SECTION }))
+			.setDesc(t("settings.columnsDesc", { remove: ARCHIVE_SECTION }))
 			.setHeading();
 
 		new Setting(containerEl)
@@ -429,7 +429,7 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName(t("settings.removeZone", { remove: t("board.removeTitle") }))
-			.setDesc(t("settings.removeZoneDesc", { remove: REMOVE_SECTION }))
+			.setDesc(t("settings.removeZoneDesc", { remove: ARCHIVE_SECTION }))
 			.addDropdown((dropdown) => {
 				for (const mode of REMOVE_ZONE_MODES) dropdown.addOption(mode, t(`settings.removeZone.${mode}`));
 				dropdown

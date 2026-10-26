@@ -13,7 +13,7 @@ What it can do:
 - Deadlines, optionally raising a task's priority as the deadline approaches.
 - Recurring tasks with a checkbox that clears itself every hour, day, week, month or year (optionally at a set time).
 - A linked details note for any task.
-- Safe removal: removed tasks stay in the file until you clear them.
+- Archive: archived tasks stay in the file until you clear them.
 - English, Russian, German, French and Spanish interface.
 
 A task in the task file looks like this:

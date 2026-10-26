@@ -9,7 +9,7 @@ import {
 	getItems,
 	moveTask,
 	parseTask,
-	REMOVE_SECTION,
+	ARCHIVE_SECTION,
 	sameTitle,
 	TaskList,
 	clearSection,
@@ -56,7 +56,7 @@ function repeatLabel(rule: RepeatRule): string {
 interface ColumnView {
 	/** Section in the task file. */
 	section: string;
-	/** Label in the header (differs from the section only for Remove). */
+	/** Label in the header (differs from the section only for Archive). */
 	title: string;
 	collapsible: boolean;
 	showCount: boolean;
@@ -77,7 +77,7 @@ export class BoardView extends ItemView {
 	private draggedColumn: number | null = null;
 	private dropIndicator: HTMLElement | null = null;
 	private renderToken = 0;
-	/** Show the Remove section as a column (toggled from the view header; not saved). */
+	/** Show the Archive section as a column (toggled from the view header; not saved). */
 	private showRemoved = false;
 	private removedAction: HTMLElement | null = null;
 	/** Opens the long-press menu of a card; used by the console helper (see devCardMenu in main.ts). */
@@ -171,7 +171,7 @@ export class BoardView extends ItemView {
 		root.addClass("paranoid-board");
 		this.dropIndicator = null;
 
-		// Columns come from settings; Remove is a drop zone unless shown as a column.
+		// Columns come from settings; Archive is a drop zone unless shown as a column.
 		this.plugin.settings.columns.forEach((column, index) => {
 			// Collapsed state is kept while collapsing is off, so it comes back when re-enabled.
 			const items = getItems(list, column.name);
@@ -192,8 +192,8 @@ export class BoardView extends ItemView {
 		this.removedAction?.toggleClass("is-active", this.showRemoved);
 		const { removeZone } = this.plugin.settings;
 		if (this.showRemoved) {
-			const column = this.renderColumn(root, getItems(list, REMOVE_SECTION), {
-				section: REMOVE_SECTION,
+			const column = this.renderColumn(root, getItems(list, ARCHIVE_SECTION), {
+				section: ARCHIVE_SECTION,
 				title: t("board.removeTitle"),
 				collapsible: false,
 				showCount: true,
@@ -541,7 +541,7 @@ export class BoardView extends ItemView {
 					.onClick(() => move(column)),
 			);
 		}
-		if (!sameTitle(section, REMOVE_SECTION)) {
+		if (!sameTitle(section, ARCHIVE_SECTION)) {
 			menu.addSeparator();
 			menu.addItem((item) =>
 				item
@@ -549,7 +549,7 @@ export class BoardView extends ItemView {
 					.setIcon("archive")
 					.onClick(() => {
 						hapticTap();
-						move(REMOVE_SECTION);
+						move(ARCHIVE_SECTION);
 					}),
 			);
 		}
@@ -601,9 +601,9 @@ export class BoardView extends ItemView {
 		}).open();
 	}
 
-	/** Asks, then deletes every task in Remove (and their details notes, like single deletion). */
+	/** Asks, then deletes every task in Archive (and their details notes, like single deletion). */
 	private confirmClearRemoved(list: TaskList): void {
-		const items = getItems(list, REMOVE_SECTION);
+		const items = getItems(list, ARCHIVE_SECTION);
 		const keep = this.plugin.settings.keepDetailsOnDelete;
 		const files = keep
 			? []
@@ -620,7 +620,7 @@ export class BoardView extends ItemView {
 			onConfirm: () => {
 				void (async () => {
 					try {
-						await updateTasks(this.app, this.plugin.columnNames(), (l) => clearSection(l, REMOVE_SECTION));
+						await updateTasks(this.app, this.plugin.columnNames(), (l) => clearSection(l, ARCHIVE_SECTION));
 						for (const file of files) await trashDetails(this.app, file);
 					} catch (e) {
 						new Notice(t("notice.error", { message: (e as Error).message }));
@@ -694,10 +694,10 @@ export class BoardView extends ItemView {
 		const zone = root.createDiv({ cls: "paranoid-column paranoid-remove-zone" });
 		if (dragOnly) zone.addClass("is-drag-only");
 		const header = zone.createDiv({ cls: "paranoid-column-header" });
-		// Only the label is translated; the section in the file is always REMOVE_SECTION.
+		// Only the label is translated; the section in the file is always ARCHIVE_SECTION.
 		header.createSpan({ cls: "paranoid-column-title", text: t("board.removeTitle") });
 		const body = zone.createDiv({ cls: "paranoid-remove-body" });
-		setIcon(body.createDiv({ cls: "paranoid-remove-icon" }), "trash-2");
+		setIcon(body.createDiv({ cls: "paranoid-remove-icon" }), "archive");
 		body.createDiv({ text: t("board.dropToRemove") });
 
 		zone.addEventListener("dragover", (e) => {
@@ -713,7 +713,7 @@ export class BoardView extends ItemView {
 			if (!this.dragged) return;
 			e.preventDefault();
 			zone.removeClass("is-drop-target");
-			this.drop(REMOVE_SECTION, Number.MAX_SAFE_INTEGER);
+			this.drop(ARCHIVE_SECTION, Number.MAX_SAFE_INTEGER);
 		});
 	}
 
