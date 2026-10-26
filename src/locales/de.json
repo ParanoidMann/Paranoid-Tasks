@@ -127,6 +127,8 @@
 	"settings.columnsDesc": "Jede Spalte ist ein Abschnitt in der Aufgabendatei. Beim Löschen einer Spalte werden ihre Aufgaben in die erste verbleibende Spalte verschoben. „{remove}“ ist immer vorhanden und kann nicht geändert werden.",
 	"settings.columnDrag": "Spalten auf dem Board ziehen",
 	"settings.columnDragDesc": "Spalten durch Ziehen ihrer Überschriften neu anordnen.",
+	"settings.reverseColumns": "Spaltenreihenfolge umkehren",
+	"settings.reverseColumnsDesc": "Spalten von der letzten zur ersten anzeigen, das Archiv zuerst. Praktisch auf dem Handy, wo die Spalten untereinander stehen: Aufgaben wandern dann von unten nach oben. Die Reihenfolge in der Aufgabendatei bleibt gleich.",
 	"settings.removeZone": "Bereich „{remove}“ anzeigen",
 	"settings.removeZoneDesc": "Das Ausblenden löscht nichts: Der Abschnitt „{remove}“ bleibt mit allen Aufgaben in der Aufgabendatei.",
 	"settings.removeZone.always": "Immer",

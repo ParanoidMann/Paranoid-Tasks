@@ -127,6 +127,8 @@
 	"settings.columnsDesc": "Cada columna es una sección del archivo de tareas. Al eliminar una columna, sus tareas pasan a la primera columna restante. «{remove}» siempre está presente y no se puede cambiar.",
 	"settings.columnDrag": "Arrastrar columnas en el tablero",
 	"settings.columnDragDesc": "Reordenar las columnas arrastrando sus encabezados.",
+	"settings.reverseColumns": "Invertir el orden de las columnas",
+	"settings.reverseColumnsDesc": "Mostrar las columnas de la última a la primera, con el archivo primero. Útil en el teléfono, donde las columnas van una debajo de otra: las tareas avanzan de abajo arriba. El orden en el archivo de tareas no cambia.",
 	"settings.removeZone": "Mostrar la zona «{remove}»",
 	"settings.removeZoneDesc": "Ocultar la zona no elimina nada: la sección «{remove}» sigue en el archivo de tareas con todas sus tareas.",
 	"settings.removeZone.always": "Siempre",

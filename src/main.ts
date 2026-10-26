@@ -355,6 +355,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 				typeof data?.boardIcon === "string" && isIconId(data.boardIcon) ? data.boardIcon : DEFAULT_SETTINGS.boardIcon,
 			columns: loadColumns(data),
 			columnDrag: loadBoolean(data?.columnDrag, DEFAULT_SETTINGS.columnDrag),
+			reverseColumns: loadBoolean(data?.reverseColumns, DEFAULT_SETTINGS.reverseColumns),
 			removeZone: loadRemoveZone(data),
 			priorities: loadPriorities(data?.priorities),
 			detailsFromText: loadBoolean(data?.detailsFromText, DEFAULT_SETTINGS.detailsFromText),

@@ -58,6 +58,8 @@ export interface ParanoidTasksSettings {
 	columns: ColumnConfig[];
 	/** Whether columns can be reordered by dragging on the board. */
 	columnDrag: boolean;
+	/** Show the board from the last column to the first, Archive first (display only; the file order stays). */
+	reverseColumns: boolean;
 	/** When the Archive drop zone is shown on the board (the section stays in the file either way). */
 	removeZone: RemoveZoneMode;
 	/** Task priorities in dropdown order. The first one is the default and is not written to Main.md. */
@@ -95,6 +97,7 @@ export const DEFAULT_SETTINGS: ParanoidTasksSettings = {
 	boardIcon: "layout-dashboard",
 	columns: [newColumn("Open"), newColumn("Done")],
 	columnDrag: true,
+	reverseColumns: false,
 	removeZone: "always",
 	priorities: [
 		{ name: "Normal", symbol: "●", color: "#4caf50" },
@@ -425,6 +428,17 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 				toggle
 					.setValue(this.plugin.settings.columnDrag)
 					.onChange((value) => void this.run(() => this.plugin.setColumnDrag(value), false)),
+			);
+
+		new Setting(containerEl)
+			.setName(t("settings.reverseColumns"))
+			.setDesc(t("settings.reverseColumnsDesc"))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.reverseColumns)
+					.onChange(
+						(value) => void this.run(() => this.plugin.updateSettings({ reverseColumns: value }), false),
+					),
 			);
 
 		new Setting(containerEl)

@@ -127,6 +127,8 @@
 	"settings.columnsDesc": "Chaque colonne est une section du fichier de tâches. Supprimer une colonne déplace ses tâches vers la première colonne restante. « {remove} » est toujours présente et ne peut pas être modifiée.",
 	"settings.columnDrag": "Glisser les colonnes sur le tableau",
 	"settings.columnDragDesc": "Réorganiser les colonnes en faisant glisser leur en-tête.",
+	"settings.reverseColumns": "Inverser l'ordre des colonnes",
+	"settings.reverseColumnsDesc": "Afficher les colonnes de la dernière à la première, les archives en premier. Pratique sur téléphone, où les colonnes sont empilées : les tâches avancent alors de bas en haut. L'ordre dans le fichier de tâches ne change pas.",
 	"settings.removeZone": "Afficher la zone « {remove} »",
 	"settings.removeZoneDesc": "Masquer la zone ne supprime rien : la section « {remove} » reste dans le fichier de tâches avec toutes ses tâches.",
 	"settings.removeZone.always": "Toujours",

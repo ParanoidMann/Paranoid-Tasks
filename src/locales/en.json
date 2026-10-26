@@ -127,6 +127,8 @@
 	"settings.columnsDesc": "Each column is a section in the task file. Deleting a column moves its tasks to the first remaining column. \"{remove}\" is always present and cannot be changed.",
 	"settings.columnDrag": "Drag columns on the board",
 	"settings.columnDragDesc": "Reorder columns by dragging their headers.",
+	"settings.reverseColumns": "Reverse column order",
+	"settings.reverseColumnsDesc": "Show columns from last to first, with the Archive first. Handy on phones, where columns are stacked: tasks then move from bottom to top. The order in the task file does not change.",
 	"settings.removeZone": "Show the \"{remove}\" zone",
 	"settings.removeZoneDesc": "Hiding the zone does not delete anything: the \"{remove}\" section stays in the task file with all its tasks.",
 	"settings.removeZone.always": "Always",

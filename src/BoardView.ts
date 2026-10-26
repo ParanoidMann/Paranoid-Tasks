@@ -172,8 +172,15 @@ export class BoardView extends ItemView {
 		root.addClass("paranoid-board");
 		this.dropIndicator = null;
 
-		// Columns come from settings; Archive is a drop zone unless shown as a column.
-		this.plugin.settings.columns.forEach((column, index) => {
+		this.removedAction?.setAttr("aria-label", t(this.showRemoved ? "board.hideRemoved" : "board.showRemoved"));
+		this.removedAction?.toggleClass("is-active", this.showRemoved);
+
+		// Columns come from settings, then Archive; reversed, the whole board is laid out back to front.
+		const { columns, reverseColumns } = this.plugin.settings;
+		if (reverseColumns) this.renderArchive(root, list);
+		const order = columns.map((column, index) => ({ column, index }));
+		if (reverseColumns) order.reverse();
+		for (const { column, index } of order) {
 			// Collapsed state is kept while collapsing is off, so it comes back when re-enabled.
 			const items = getItems(list, column.name);
 			const columnEl =
@@ -187,10 +194,12 @@ export class BoardView extends ItemView {
 							canAdd: true,
 						});
 			this.setupColumnDrag(columnEl, index);
-		});
+		}
+		if (!reverseColumns) this.renderArchive(root, list);
+	}
 
-		this.removedAction?.setAttr("aria-label", t(this.showRemoved ? "board.hideRemoved" : "board.showRemoved"));
-		this.removedAction?.toggleClass("is-active", this.showRemoved);
+	/** Archive is a drop zone unless shown as a column. */
+	private renderArchive(root: HTMLElement, list: TaskList): void {
 		const { removeZone } = this.plugin.settings;
 		if (this.showRemoved) {
 			const column = this.renderColumn(root, getItems(list, ARCHIVE_SECTION), {
@@ -247,7 +256,9 @@ export class BoardView extends ItemView {
 			if (this.draggedColumn === null) return;
 			e.preventDefault();
 			const from = this.draggedColumn;
-			const to = this.isFirstHalf(column, e) ? index : index + 1;
+			// Reversed, the visual "before" is after the column in settings order.
+			const before = this.isFirstHalf(column, e) !== this.plugin.settings.reverseColumns;
+			const to = before ? index : index + 1;
 			this.endDrag();
 			void this.plugin.moveColumnTo(from, to).catch((err: Error) => new Notice(t("notice.error", { message: err.message })));
 		});
