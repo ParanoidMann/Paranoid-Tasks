@@ -73,10 +73,53 @@ interface DragState {
 	text: string;
 }
 
+/** What happens when a dragged card or column is over an element (desktop drag events or a touch drag). */
+interface DropTarget {
+	over(x: number, y: number): void;
+	leave(): void;
+	drop(x: number, y: number): void;
+}
+
+interface TouchGestureOptions {
+	/** The finger rested long enough and was lifted without moving. */
+	onLongPress?: (x: number, y: number) => void;
+	/** The finger rested long enough, then moved: a drag starts. */
+	drag?: {
+		/** Marks what is dragged (this.dragged / this.draggedColumn). */
+		start: () => void;
+		/** Drop targets by column element. */
+		targets: WeakMap<HTMLElement, DropTarget>;
+		/** Element shown under the finger while dragging (a copy of it); the touched element by default. */
+		ghostOf?: HTMLElement;
+	};
+	/** Touches starting on these elements (e.g. buttons inside a column header) are ignored. */
+	ignore?: string;
+}
+
+/** A touch drag in progress. */
+interface TouchDrag {
+	move(x: number, y: number): void;
+	drop(): void;
+	cancel(): void;
+}
+
+/** Distance from the board edge where a touch drag scrolls the board, and the top speed (px per frame). */
+const AUTO_SCROLL_EDGE_PX = 56;
+const AUTO_SCROLL_SPEED_PX = 14;
+
 export class BoardView extends ItemView {
 	private dragged: DragState | null = null;
 	/** Index of the column being dragged, or null. */
 	private draggedColumn: number | null = null;
+	/** Where dragged cards / columns can be dropped, by column element; filled on render. */
+	private cardTargets = new WeakMap<HTMLElement, DropTarget>();
+	private columnTargets = new WeakMap<HTMLElement, DropTarget>();
+	/**
+	 * Set while a finger holds a card or column long enough to drag it (mobile). Redraws wait until the
+	 * touch ends: the touched element would be replaced and the drag would lose its targets.
+	 */
+	private touchBusy = false;
+	private pendingRender: TaskList | null = null;
 	private dropIndicator: HTMLElement | null = null;
 	private renderToken = 0;
 	/** The list last drawn and the checked state of its tasks at that time, see refreshIfDoneChanged. */
@@ -195,6 +238,10 @@ export class BoardView extends ItemView {
 	}
 
 	private render(list: TaskList): void {
+		if (this.touchBusy) {
+			this.pendingRender = list;
+			return;
+		}
 		this.rendered = { list, done: doneSignature(list, new Date()) };
 		const root = this.contentEl;
 		root.empty();
@@ -228,8 +275,8 @@ export class BoardView extends ItemView {
 	}
 
 	/**
-	 * Archive is a drop zone unless shown as a column. Never on mobile: cards are not dragged
-	 * there (they are archived from the long-press menu), so the setting is ignored.
+	 * Archive is a drop zone unless shown as a column. Never on mobile: cards are archived from the
+	 * long-press menu there, so the setting is ignored.
 	 */
 	private renderArchive(root: HTMLElement, list: TaskList): void {
 		const { removeZone } = this.plugin.settings;
@@ -250,18 +297,52 @@ export class BoardView extends ItemView {
 
 	/**
 	 * Lets the column be reordered by dragging its header (or the whole strip
-	 * when collapsed), unless disabled in settings. Not on mobile: a native drag started by a touch
-	 * that does not end cleanly can leave iOS unable to scroll until Obsidian is restarted.
+	 * when collapsed), unless disabled in settings. On mobile with a hand-made touch drag (long press,
+	 * then move): a native drag started by a touch that does not end cleanly can leave iOS unable to
+	 * scroll until Obsidian is restarted.
 	 */
 	private setupColumnDrag(column: HTMLElement, index: number): void {
-		if (!this.plugin.settings.columnDrag || Platform.isMobile) return;
+		if (!this.plugin.settings.columnDrag) return;
 		const handle = column.hasClass("is-collapsed")
 			? column
 			: column.querySelector<HTMLElement>(".paranoid-column-header");
 		if (!handle) return;
-		handle.draggable = true;
 		handle.addClass("paranoid-column-handle");
 
+		this.addDropTarget(column, this.columnTargets, () => this.draggedColumn !== null, {
+			over: (x, y) => {
+				const before = this.isFirstHalf(column, x, y);
+				this.clearColumnDropMarks();
+				column.addClass(before ? "is-drop-before" : "is-drop-after");
+			},
+			leave: () => this.clearColumnDropMarks(),
+			drop: (x, y) => {
+				const from = this.draggedColumn;
+				this.endDrag();
+				if (from === null) return;
+				// Reversed, the visual "before" is after the column in settings order.
+				const before = this.isFirstHalf(column, x, y) !== this.plugin.settings.reverseColumns;
+				const to = before ? index : index + 1;
+				void this.plugin.moveColumnTo(from, to).catch((err: Error) => new Notice(t("notice.error", { message: err.message })));
+			},
+		});
+
+		if (Platform.isMobile) {
+			this.touchGesture(handle, {
+				ignore: "button, .clickable-icon",
+				drag: {
+					start: () => {
+						this.draggedColumn = index;
+						column.addClass("is-dragging");
+					},
+					targets: this.columnTargets,
+					ghostOf: column,
+				},
+			});
+			return;
+		}
+
+		handle.draggable = true;
 		handle.addEventListener("dragstart", (e) => {
 			this.draggedColumn = index;
 			e.dataTransfer?.setData("text/plain", this.plugin.settings.columns[index].name);
@@ -272,36 +353,41 @@ export class BoardView extends ItemView {
 			column.removeClass("is-dragging");
 			this.endDrag();
 		});
+	}
 
-		column.addEventListener("dragover", (e) => {
-			if (this.draggedColumn === null) return;
+	/**
+	 * Registers `target` for touch drags in `targets` and wires it to desktop drag events,
+	 * which it handles while `accepts()` (i.e. the right kind of thing is dragged).
+	 */
+	private addDropTarget(
+		el: HTMLElement,
+		targets: WeakMap<HTMLElement, DropTarget>,
+		accepts: () => boolean,
+		target: DropTarget,
+	): void {
+		targets.set(el, target);
+		el.addEventListener("dragover", (e) => {
+			if (!accepts()) return;
 			e.preventDefault();
 			if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-			const before = this.isFirstHalf(column, e);
-			this.clearColumnDropMarks();
-			column.addClass(before ? "is-drop-before" : "is-drop-after");
+			target.over(e.clientX, e.clientY);
 		});
-		column.addEventListener("dragleave", (e) => {
-			if (!column.contains(e.relatedTarget as Node | null)) this.clearColumnDropMarks();
+		el.addEventListener("dragleave", (e) => {
+			if (!el.contains(e.relatedTarget as Node | null)) target.leave();
 		});
-		column.addEventListener("drop", (e) => {
-			if (this.draggedColumn === null) return;
+		el.addEventListener("drop", (e) => {
+			if (!accepts()) return;
 			e.preventDefault();
-			const from = this.draggedColumn;
-			// Reversed, the visual "before" is after the column in settings order.
-			const before = this.isFirstHalf(column, e) !== this.plugin.settings.reverseColumns;
-			const to = before ? index : index + 1;
-			this.endDrag();
-			void this.plugin.moveColumnTo(from, to).catch((err: Error) => new Notice(t("notice.error", { message: err.message })));
+			target.drop(e.clientX, e.clientY);
 		});
 	}
 
-	/** Whether the cursor is in the left half of a column, or the top half when columns are stacked (phones). */
-	private isFirstHalf(el: HTMLElement, e: DragEvent): boolean {
+	/** Whether a point is in the left half of a column, or the top half when columns are stacked (phones). */
+	private isFirstHalf(el: HTMLElement, x: number, y: number): boolean {
 		const rect = el.getBoundingClientRect();
 		return getComputedStyle(this.contentEl).flexDirection === "column"
-			? e.clientY < rect.top + rect.height / 2
-			: e.clientX < rect.left + rect.width / 2;
+			? y < rect.top + rect.height / 2
+			: x < rect.left + rect.width / 2;
 	}
 
 	private clearColumnDropMarks(): void {
@@ -347,20 +433,10 @@ export class BoardView extends ItemView {
 		const cardList = column.createDiv({ cls: "paranoid-cards" });
 		items.forEach((text, index) => this.renderCard(cardList, section, index, text));
 
-		column.addEventListener("dragover", (e) => {
-			if (!this.dragged) return;
-			e.preventDefault();
-			if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-			this.showIndicator(cardList, this.dropIndex(cardList, e.clientY));
-		});
-		column.addEventListener("dragleave", (e) => {
-			if (!column.contains(e.relatedTarget as Node | null)) this.hideIndicator();
-		});
-		column.addEventListener("drop", (e) => {
-			if (!this.dragged) return;
-			e.preventDefault();
-			const toIndex = this.dropIndex(cardList, e.clientY);
-			this.drop(section, toIndex);
+		this.addDropTarget(column, this.cardTargets, () => this.dragged !== null, {
+			over: (_x, y) => this.showIndicator(cardList, this.dropIndex(cardList, y)),
+			leave: () => this.hideIndicator(),
+			drop: (_x, y) => this.drop(section, this.dropIndex(cardList, y)),
 		});
 		return column;
 	}
@@ -379,19 +455,10 @@ export class BoardView extends ItemView {
 		}
 		column.addEventListener("click", () => void this.plugin.setCollapsed(section, false));
 
-		column.addEventListener("dragover", (e) => {
-			if (!this.dragged) return;
-			e.preventDefault();
-			if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-			column.addClass("is-drop-target");
-		});
-		column.addEventListener("dragleave", (e) => {
-			if (!column.contains(e.relatedTarget as Node | null)) column.removeClass("is-drop-target");
-		});
-		column.addEventListener("drop", (e) => {
-			if (!this.dragged) return;
-			e.preventDefault();
-			this.drop(section, Number.MAX_SAFE_INTEGER);
+		this.addDropTarget(column, this.cardTargets, () => this.dragged !== null, {
+			over: () => column.addClass("is-drop-target"),
+			leave: () => column.removeClass("is-drop-target"),
+			drop: () => this.drop(section, Number.MAX_SAFE_INTEGER),
 		});
 		return column;
 	}
@@ -401,7 +468,7 @@ export class BoardView extends ItemView {
 		const task = parseTask(text);
 		const priority = this.findPriority(task.priority);
 		const card = cardList.createDiv({ cls: "paranoid-card" });
-		// On mobile, cards are moved with the long-press menu instead of dragging.
+		// On mobile, cards are dragged with a hand-made touch drag instead (see setupColumnDrag for why).
 		card.draggable = !Platform.isMobile;
 
 		if (task.repeat) {
@@ -484,9 +551,19 @@ export class BoardView extends ItemView {
 		if (Platform.isMobile) {
 			// Reset on every touch: a long press is not always followed by a click.
 			card.addEventListener("touchstart", () => (longPressed = false), { passive: true });
-			this.onLongPress(card, (x, y) => {
-				longPressed = true;
-				this.showCardMenu({ x, y }, section, index, text, edit);
+			this.touchGesture(card, {
+				onLongPress: (x, y) => {
+					longPressed = true;
+					this.showCardMenu({ x, y }, section, index, text, edit);
+				},
+				drag: {
+					start: () => {
+						this.dragged = { section, index, text };
+						card.addClass("is-dragging");
+						this.contentEl.addClass("is-dragging-card");
+					},
+					targets: this.cardTargets,
+				},
 			});
 		}
 		card.addEventListener("dragstart", (e) => {
@@ -506,56 +583,147 @@ export class BoardView extends ItemView {
 	}
 
 	/**
-	 * Calls `onPress` with the touch position after a finger rests on `el` without moving and is then
-	 * lifted; `el` gets "is-long-pressed" once the press is long enough. Hand-made because iOS does not
-	 * fire "contextmenu" on a long press. The menu opens only after the finger is lifted: opened in the
-	 * middle of a touch, Obsidian's mobile menu sheet could leave the board unable to scroll.
+	 * Touch gestures on `el` (mobile). A finger resting without moving for LONG_PRESS_MS makes the press
+	 * "long" (`el` gets "is-long-pressed"); then lifting it calls `onLongPress`, and moving it starts a drag.
+	 * A finger that moves earlier is a scroll and is left alone. Hand-made because iOS does not fire
+	 * "contextmenu" on a long press and native drag and drop breaks scrolling there. The menu opens only
+	 * after the finger is lifted: opened in the middle of a touch, Obsidian's mobile menu sheet could
+	 * leave the board unable to scroll.
 	 */
-	private onLongPress(el: HTMLElement, onPress: (x: number, y: number) => void): void {
+	private touchGesture(el: HTMLElement, options: TouchGestureOptions): void {
 		let timer: number | null = null;
 		let ready = false;
 		let start = { x: 0, y: 0 };
+		let drag: TouchDrag | null = null;
+
 		const reset = () => {
 			if (timer !== null) window.clearTimeout(timer);
 			timer = null;
-			ready = false;
 			el.removeClass("is-long-pressed");
+			const cancelled = drag;
+			drag = null;
+			cancelled?.cancel();
+			if (ready) {
+				ready = false;
+				this.setTouchBusy(false);
+			}
 		};
+
 		// Passive: these never block scrolling.
 		el.addEventListener(
 			"touchstart",
 			(e) => {
 				reset();
 				if (e.touches.length !== 1) return;
+				if (options.ignore && (e.target as Element | null)?.closest(options.ignore)) return;
 				start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
 				timer = window.setTimeout(() => {
 					timer = null;
 					ready = true;
+					this.setTouchBusy(true);
 					el.addClass("is-long-pressed");
 				}, LONG_PRESS_MS);
 			},
 			{ passive: true },
 		);
+		// Not passive, so that once the press is long it can stop the page from scrolling under a dragged
+		// item (and Obsidian from taking the move for a sidebar swipe). Registered up front: iOS decides at
+		// the start of a touch whether it may be cancelled. Before that, a move only cancels the press.
 		el.addEventListener(
 			"touchmove",
 			(e) => {
 				const touch = e.touches[0];
-				if (touch && Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > LONG_PRESS_SLOP_PX) reset();
+				if (!touch || (timer === null && !ready)) return;
+				const moved = Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > LONG_PRESS_SLOP_PX;
+				if (!drag) {
+					// A held finger must not start a scroll with small moves before the drag begins.
+					if (ready && options.drag) e.preventDefault();
+					if (!moved) return;
+					if (!ready || !options.drag) {
+						reset();
+						return;
+					}
+					drag = this.startTouchDrag(el, options.drag, start);
+				}
+				e.preventDefault();
+				e.stopPropagation();
+				drag.move(touch.clientX, touch.clientY);
 			},
-			{ passive: true },
+			{ passive: false },
 		);
-		// Not passive: a completed long press cancels the click that would follow, which could
-		// otherwise land on the menu that has just opened under the finger.
+		// Not passive: a completed long press or drag cancels the click that would follow, which could
+		// otherwise open the card or land on the menu that has just opened under the finger.
 		el.addEventListener("touchend", (e) => {
-			const open = ready;
+			const dropped = drag;
+			const held = ready;
+			drag = null;
+			if (dropped) {
+				e.preventDefault();
+				// Dropped before the deferred redraw in reset(), while the targets are still on the board.
+				dropped.drop();
+			}
 			reset();
-			if (!open) return;
+			if (dropped || !held) return;
 			e.preventDefault();
-			onPress(start.x, start.y);
+			options.onLongPress?.(start.x, start.y);
 		});
 		el.addEventListener("touchcancel", reset, { passive: true });
-		// Android also fires "contextmenu" on a long press; the menu above replaces it.
+		// Android also fires "contextmenu" on a long press; the gestures above replace it.
 		el.addEventListener("contextmenu", (e) => e.preventDefault());
+	}
+
+	/** While set, redraws are deferred (see touchBusy); clearing it draws the latest deferred list. */
+	private setTouchBusy(busy: boolean): void {
+		this.touchBusy = busy;
+		if (busy || !this.pendingRender) return;
+		const list = this.pendingRender;
+		this.pendingRender = null;
+		this.render(list);
+	}
+
+	/**
+	 * Starts a touch drag of `el` from `start`: a copy of it follows the finger, the drop target under
+	 * the finger is highlighted, and the board scrolls when the finger is near its edge.
+	 */
+	private startTouchDrag(el: HTMLElement, options: NonNullable<TouchGestureOptions["drag"]>, start: { x: number; y: number }): TouchDrag {
+		const ghost = createGhost(options.ghostOf ?? el);
+		options.start();
+		let point = start;
+		let current: DropTarget | null = null;
+
+		const update = () => {
+			const column = document.elementFromPoint(point.x, point.y)?.closest<HTMLElement>(".paranoid-column");
+			const target = column && this.contentEl.contains(column) ? (options.targets.get(column) ?? null) : null;
+			if (target !== current) current?.leave();
+			current = target;
+			current?.over(point.x, point.y);
+		};
+		const tick = () => {
+			if (autoScroll(this.contentEl, point)) update();
+			frame = window.requestAnimationFrame(tick);
+		};
+		let frame = window.requestAnimationFrame(tick);
+		const finish = () => {
+			window.cancelAnimationFrame(frame);
+			ghost.remove();
+		};
+
+		return {
+			move: (x, y) => {
+				point = { x, y };
+				ghost.setCssProps({ "--paranoid-ghost-dx": `${x - start.x}px`, "--paranoid-ghost-dy": `${y - start.y}px` });
+				update();
+			},
+			drop: () => {
+				finish();
+				if (current) current.drop(point.x, point.y);
+				else this.endDrag();
+			},
+			cancel: () => {
+				finish();
+				this.endDrag();
+			},
+		};
 	}
 
 	/** Opens the mobile card menu for a card element (or an element inside it), or the n-th card on the board. */
@@ -571,7 +739,7 @@ export class BoardView extends ItemView {
 		return true;
 	}
 
-	/** Card actions for mobile, where dragging is inconvenient: edit, move to another column, remove. */
+	/** Card actions for mobile (a long press without moving): edit, move to another column, remove. */
 	private showCardMenu(position: { x: number; y: number }, section: string, index: number, text: string, edit: () => void): void {
 		const move = (to: string) => void this.mutate((l) => moveTask(l, section, index, text, to, Number.MAX_SAFE_INTEGER));
 		const menu = new Menu();
@@ -753,20 +921,10 @@ export class BoardView extends ItemView {
 		setIcon(body.createDiv({ cls: "paranoid-remove-icon" }), "archive");
 		body.createDiv({ text: t("board.dropToRemove") });
 
-		zone.addEventListener("dragover", (e) => {
-			if (!this.dragged) return;
-			e.preventDefault();
-			if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-			zone.addClass("is-drop-target");
-		});
-		zone.addEventListener("dragleave", (e) => {
-			if (!zone.contains(e.relatedTarget as Node | null)) zone.removeClass("is-drop-target");
-		});
-		zone.addEventListener("drop", (e) => {
-			if (!this.dragged) return;
-			e.preventDefault();
-			zone.removeClass("is-drop-target");
-			this.drop(ARCHIVE_SECTION, Number.MAX_SAFE_INTEGER);
+		this.addDropTarget(zone, this.cardTargets, () => this.dragged !== null, {
+			over: () => zone.addClass("is-drop-target"),
+			leave: () => zone.removeClass("is-drop-target"),
+			drop: () => this.drop(ARCHIVE_SECTION, Number.MAX_SAFE_INTEGER),
 		});
 	}
 
@@ -807,7 +965,40 @@ export class BoardView extends ItemView {
 		this.hideIndicator();
 		this.clearColumnDropMarks();
 		this.contentEl.querySelectorAll(".is-drop-target").forEach((el) => el.removeClass("is-drop-target"));
+		// Touch drags have no "dragend" on the dragged element to clear its mark.
+		this.contentEl.querySelectorAll(".is-dragging").forEach((el) => el.removeClass("is-dragging"));
 	}
+}
+
+/**
+ * A copy of `source` that stays where it is on screen and is moved by the
+ * --paranoid-ghost-dx/dy CSS variables; it does not catch touches, so the element under it can be found.
+ */
+function createGhost(source: HTMLElement): HTMLElement {
+	const rect = source.getBoundingClientRect();
+	const ghost = source.cloneNode(true) as HTMLElement;
+	ghost.removeClasses(["is-long-pressed", "is-dragging", "is-drop-before", "is-drop-after", "is-drop-target"]);
+	ghost.addClass("paranoid-drag-ghost");
+	ghost.setCssProps({
+		"--paranoid-ghost-left": `${rect.left}px`,
+		"--paranoid-ghost-top": `${rect.top}px`,
+		"--paranoid-ghost-width": `${rect.width}px`,
+	});
+	document.body.appendChild(ghost);
+	return ghost;
+}
+
+/** Scrolls `scroller` when `point` is near one of its edges, faster closer to it; true if it scrolled. */
+function autoScroll(scroller: HTMLElement, point: { x: number; y: number }): boolean {
+	const rect = scroller.getBoundingClientRect();
+	const speed = (distance: number) =>
+		distance < AUTO_SCROLL_EDGE_PX ? Math.ceil(((AUTO_SCROLL_EDGE_PX - Math.max(distance, 0)) / AUTO_SCROLL_EDGE_PX) * AUTO_SCROLL_SPEED_PX) : 0;
+	const dx = speed(rect.right - point.x) - speed(point.x - rect.left);
+	const dy = speed(rect.bottom - point.y) - speed(point.y - rect.top);
+	if (dx === 0 && dy === 0) return false;
+	const { scrollLeft, scrollTop } = scroller;
+	scroller.scrollBy(dx, dy);
+	return scroller.scrollLeft !== scrollLeft || scroller.scrollTop !== scrollTop;
 }
 
 /** Which tasks of the list count as checked at `now`, as a string to compare. */

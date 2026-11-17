@@ -461,19 +461,46 @@
 	box-shadow: 0 3px 0 var(--interactive-accent);
 }
 
-/* Mobile: a long press on a card opens its menu, so it must not select text or show the system callout.
-   Cards are not dragged there, so the drop-to-remove zone is not shown either. */
-.is-mobile .paranoid-card {
+/* Mobile: a long press on a card (or a column header) opens its menu or starts a drag, so it must not
+   select text or show the system callout. */
+.is-mobile .paranoid-card,
+.is-mobile .paranoid-column-handle {
 	-webkit-touch-callout: none;
 	user-select: none;
 }
 
-/* Held long enough: lifting the finger opens the card menu. */
+/* Held long enough: lifting the finger opens the card menu, moving it drags the card. */
 .is-mobile .paranoid-card.is-long-pressed {
 	border-color: var(--interactive-accent);
 	background-color: var(--background-modifier-hover);
 }
 
+.is-mobile .paranoid-column-handle.is-long-pressed {
+	border-radius: var(--radius-s);
+	background-color: var(--background-modifier-hover);
+}
+
+/* Copy of a card or column following the finger during a touch drag. */
+.paranoid-drag-ghost {
+	position: fixed;
+	left: var(--paranoid-ghost-left);
+	top: var(--paranoid-ghost-top);
+	width: var(--paranoid-ghost-width);
+	margin: 0;
+	transform: translate(var(--paranoid-ghost-dx, 0px), var(--paranoid-ghost-dy, 0px));
+	pointer-events: none;
+	z-index: var(--layer-dragged-item, 1000);
+	opacity: 0.9;
+	box-shadow: var(--shadow-l);
+}
+
+/* A whole column could be taller than the screen; its top part is enough to show what is dragged. */
+.paranoid-column.paranoid-drag-ghost {
+	max-height: 160px;
+	overflow: hidden;
+}
+
+/* Archiving is in the long-press menu and the phone screen is narrow, so the zone is not shown. */
 .is-mobile .paranoid-remove-zone {
 	display: none;
 }
