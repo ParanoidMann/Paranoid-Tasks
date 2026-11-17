@@ -8,6 +8,7 @@ import {
 	formatTask,
 	getItems,
 	insertTaskAfter,
+	isDone,
 	moveTask,
 	parseTask,
 	ARCHIVE_SECTION,
@@ -78,6 +79,8 @@ export class BoardView extends ItemView {
 	private draggedColumn: number | null = null;
 	private dropIndicator: HTMLElement | null = null;
 	private renderToken = 0;
+	/** The list last drawn and the checked state of its tasks at that time, see refreshIfDoneChanged. */
+	private rendered: { list: TaskList; done: string } | null = null;
 	/** Show the Archive section as a column (toggled from the view header; not saved). */
 	private showRemoved = false;
 	private removedAction: HTMLElement | null = null;
@@ -158,6 +161,13 @@ export class BoardView extends ItemView {
 		this.render(list);
 	}
 
+	/** Redraws the board if a recurring task's period has passed since it was drawn, so its check mark goes away. */
+	refreshIfDoneChanged(): void {
+		if (this.rendered && doneSignature(this.rendered.list, new Date()) !== this.rendered.done) {
+			this.render(this.rendered.list);
+		}
+	}
+
 	private async mutate(fn: (list: TaskList) => TaskList): Promise<void> {
 		try {
 			await updateTasks(this.app, this.plugin.columnNames(), fn);
@@ -167,6 +177,7 @@ export class BoardView extends ItemView {
 	}
 
 	private render(list: TaskList): void {
+		this.rendered = { list, done: doneSignature(list, new Date()) };
 		const root = this.contentEl;
 		root.empty();
 		root.addClass("paranoid-board");
@@ -378,7 +389,7 @@ export class BoardView extends ItemView {
 				cls: "task-list-item-checkbox paranoid-card-checkbox",
 				attr: { "aria-label": t("board.markDone") },
 			});
-			checkbox.checked = task.done !== null;
+			checkbox.checked = isDone(task, new Date());
 			if (checkbox.checked) card.addClass("is-done");
 			checkbox.addEventListener("click", (e) => {
 				e.stopPropagation();
@@ -776,4 +787,11 @@ export class BoardView extends ItemView {
 		this.clearColumnDropMarks();
 		this.contentEl.querySelectorAll(".is-drop-target").forEach((el) => el.removeClass("is-drop-target"));
 	}
+}
+
+/** Which tasks of the list count as checked at `now`, as a string to compare. */
+function doneSignature(list: TaskList, now: Date): string {
+	return list.sections
+		.map((s) => s.items.map((raw) => (isDone(parseTask(raw), now) ? "1" : "0")).join(""))
+		.join("|");
 }

@@ -12,6 +12,7 @@ import {
 	formatTask,
 	getItems,
 	insertTaskAfter,
+	isDone,
 	mergeSection,
 	moveTask,
 	normalize,
@@ -19,7 +20,6 @@ import {
 	parseRepeat,
 	parseTask,
 	periodStart,
-	resetRecurring,
 	renameDetails,
 	renamePriority,
 	renameSection,
@@ -411,30 +411,15 @@ describe("recurring tasks", () => {
 		expect(start("yearly")).toEqual(new Date(2026, 0, 1));
 	});
 
-	it("unchecks tasks checked in an earlier period only", () => {
-		const list = parse(
-			[
-				"## Open",
-				"- [Repeat: daily] [Done: 2026-10-21 23:59] yesterday",
-				"- [Repeat: daily] [Done: 2026-10-22 00:00] today",
-				"- [Repeat: hourly] [Done: 2026-10-22 13:59] last hour",
-				"- [Repeat: daily 09:00] [Done: 2026-10-22 08:59] before nine",
-				"- [Repeat: daily 09:00] [Done: 2026-10-22 09:00] after nine",
-				"- [Done: 2026-01-01 00:00] not recurring",
-				"## Archive",
-				"- [Repeat: daily] [Done: 2026-10-01 10:00] removed",
-			].join("\n"),
-		);
-		const result = resetRecurring(list, now);
-		expect(getItems(result, "Open")).toEqual([
-			"[Repeat: daily] yesterday",
-			"[Repeat: daily] [Done: 2026-10-22 00:00] today",
-			"[Repeat: hourly] last hour",
-			"[Repeat: daily 09:00] before nine",
-			"[Repeat: daily 09:00] [Done: 2026-10-22 09:00] after nine",
-			"[Done: 2026-01-01 00:00] not recurring",
-		]);
-		expect(getItems(result, "Archive")).toEqual(["[Repeat: daily] [Done: 2026-10-01 10:00] removed"]);
+	it("counts tasks as checked within the current period only", () => {
+		const done = (line: string) => isDone(parseTask(line), now);
+		expect(done("[Repeat: daily] [Done: 2026-10-21 23:59] yesterday")).toBe(false);
+		expect(done("[Repeat: daily] [Done: 2026-10-22 00:00] today")).toBe(true);
+		expect(done("[Repeat: hourly] [Done: 2026-10-22 13:59] last hour")).toBe(false);
+		expect(done("[Repeat: daily 09:00] [Done: 2026-10-22 08:59] before nine")).toBe(false);
+		expect(done("[Repeat: daily 09:00] [Done: 2026-10-22 09:00] after nine")).toBe(true);
+		expect(done("[Repeat: daily] unchecked")).toBe(false);
+		expect(done("[Done: 2026-01-01 00:00] not recurring")).toBe(true);
 	});
 });
 

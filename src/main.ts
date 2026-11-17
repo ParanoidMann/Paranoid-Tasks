@@ -21,7 +21,6 @@ import {
 	renameDetails,
 	renamePriority as renamePriorityTags,
 	renameSection,
-	resetRecurring,
 	sameTitle,
 	sanitize,
 	serialize,
@@ -54,8 +53,8 @@ export default class ParanoidTasksPlugin extends Plugin {
 
 		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => void this.onFileRenamed(file, oldPath)));
 
-		// Automatic updates (deadline escalation, recurring resets): on start, every minute (hourly and
-		// "daily HH:MM" resets need minute precision) and shortly after the task file changes.
+		// Automatic updates (deadline escalation, redrawing recurring tasks whose period has passed): on start,
+		// every minute (hourly and "daily HH:MM" rollovers need minute precision) and shortly after the task file changes.
 		// It only writes when something changes, so reacting to its own writes does not loop.
 		const checkSoon = debounce(() => void this.runMaintenance(), 1000, true);
 		this.registerEvent(
@@ -143,9 +142,9 @@ export default class ParanoidTasksPlugin extends Plugin {
 	}
 
 	/**
-	 * Time-based updates of the task file: unchecks recurring tasks whose period
-	 * has passed and, if enabled, raises the priority of tasks with a close
-	 * deadline. Writes only when something changes.
+	 * Time-based updates: redraws boards when a recurring task's period has passed
+	 * and, if enabled, raises the priority of tasks with a close deadline in the
+	 * task file. Writes only when something changes.
 	 */
 	async runMaintenance(): Promise<void> {
 		if (!(this.app.vault.getAbstractFileByPath(taskFilePath()) instanceof TFile)) return;
@@ -153,12 +152,12 @@ export default class ParanoidTasksPlugin extends Plugin {
 		const { deadlineEscalate, deadlineDays, deadlinePriority, priorities } = this.settings;
 		const now = new Date();
 		const today = toISODate(now);
-		const update = (l: TaskList) => {
-			const reset = resetRecurring(l, now);
-			return deadlineEscalate && deadlinePriority
-				? escalatePriorities(reset, today, deadlineDays, deadlinePriority, priorities[0].name)
-				: reset;
-		};
+		// Recurring tasks are not reset here: whether they count as checked is derived from
+		// the Done tag at render time (see isDone), so the board only needs a redraw.
+		this.refreshBoardsIfDoneChanged();
+		if (!deadlineEscalate || !deadlinePriority) return;
+		const update = (l: TaskList) =>
+			escalatePriorities(l, today, deadlineDays, deadlinePriority, priorities[0].name);
 		try {
 			const list = await readTasks(this.app);
 			if (serialize(update(list)) === serialize(list)) return;
@@ -332,6 +331,12 @@ export default class ParanoidTasksPlugin extends Plugin {
 		this.settings.columns = columns;
 		await this.saveData(this.settings);
 		this.refreshBoards();
+	}
+
+	private refreshBoardsIfDoneChanged(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BOARD)) {
+			if (leaf.view instanceof BoardView) leaf.view.refreshIfDoneChanged();
+		}
 	}
 
 	private refreshBoards(): void {

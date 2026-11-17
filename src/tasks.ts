@@ -397,23 +397,18 @@ export function renameDetails(list: TaskList, oldNames: string[], newName: strin
 	});
 }
 
-/** Unchecks recurring tasks checked before the start of their current period. Tasks in Archive are left alone. */
-export function resetRecurring(list: TaskList, now: Date): TaskList {
-	return {
-		preamble: list.preamble,
-		sections: list.sections.map((s) => ({
-			title: s.title,
-			items: sameTitle(s.title, ARCHIVE_SECTION)
-				? s.items
-				: s.items.map((raw) => {
-						const task = parseTask(raw);
-						const rule = task.repeat ? parseRepeat(task.repeat) : null;
-						const checkedAt = task.done ? parseDoneTime(task.done) : null;
-						if (!rule || !checkedAt || checkedAt >= periodStart(rule, now)) return raw;
-						return formatTask({ ...task, done: null });
-					}),
-		})),
-	};
+/**
+ * Whether a recurring task counts as checked at `now`: it has a Done tag set
+ * within the current period of its rule. An older Done tag stays in the file
+ * but no longer counts, so the period rollover is never written to the file —
+ * automatic writes raced with sync and got merged into garbled lines.
+ */
+export function isDone(task: ParsedTask, now: Date): boolean {
+	if (!task.done) return false;
+	const rule = task.repeat ? parseRepeat(task.repeat) : null;
+	const checkedAt = parseDoneTime(task.done);
+	if (!rule || !checkedAt) return true;
+	return checkedAt >= periodStart(rule, now);
 }
 
 /**
