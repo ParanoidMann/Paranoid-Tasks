@@ -198,7 +198,8 @@ interface SettingRow {
 	/** Rows without their own name (column and priority lists) are left out of the search. */
 	searchable?: boolean;
 	visible?: boolean;
-	render?: (setting: Setting) => void;
+	/** Builds the controls; the return value (often the Setting, from chained calls) is ignored. */
+	render?: (setting: Setting) => unknown;
 }
 
 /** Rows under a heading; the description is shown as a row of its own under the heading. */
@@ -675,7 +676,13 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 function toDefinition(row: SettingRow): SettingDefinition {
 	const base = { name: row.name, desc: row.desc, searchable: row.searchable, visible: row.visible };
 	const render = row.render;
-	return render ? { ...base, render: (setting: Setting) => render(setting) } : base;
+	if (!render) return base;
+	return {
+		...base,
+		render: (setting: Setting) => {
+			render(setting);
+		},
+	};
 }
 
 /** A section as a declarative group; its description becomes a text row under the heading. */
