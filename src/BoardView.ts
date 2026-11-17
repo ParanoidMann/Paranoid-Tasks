@@ -104,11 +104,12 @@ export class BoardView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
+		// Each action is placed to the left of the previous one: archive, file, then the "more" menu.
+		this.addAction("file-text", t("board.openFile"), () => void this.openTaskFile());
 		this.removedAction = this.addAction("archive", t("board.showRemoved"), () => {
 			this.showRemoved = !this.showRemoved;
 			void this.refresh();
 		});
-		this.addAction("file-text", t("board.openFile"), () => void this.openTaskFile());
 		// Main.md content changes redraw the board; any note appearing, disappearing or
 		// being renamed may change whether a details link resolves.
 		const onMainChange = (file: TAbstractFile) => {
@@ -226,7 +227,10 @@ export class BoardView extends ItemView {
 		if (!reverseColumns) this.renderArchive(root, list);
 	}
 
-	/** Archive is a drop zone unless shown as a column. */
+	/**
+	 * Archive is a drop zone unless shown as a column. Never on mobile: cards are not dragged
+	 * there (they are archived from the long-press menu), so the setting is ignored.
+	 */
 	private renderArchive(root: HTMLElement, list: TaskList): void {
 		const { removeZone } = this.plugin.settings;
 		if (this.showRemoved) {
@@ -239,7 +243,7 @@ export class BoardView extends ItemView {
 				onClear: () => this.confirmClearRemoved(list),
 			});
 			column.addClass("paranoid-removed-column");
-		} else if (removeZone !== "never") {
+		} else if (removeZone !== "never" && !Platform.isMobile) {
 			this.renderRemoveZone(root, removeZone === "drag");
 		}
 	}

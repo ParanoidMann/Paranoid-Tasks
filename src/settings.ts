@@ -3,6 +3,7 @@ import {
 	App,
 	getIconIds,
 	Notice,
+	Platform,
 	PluginSettingTab,
 	setIcon,
 	Setting,
@@ -441,7 +442,8 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 					),
 			);
 
-		new Setting(containerEl)
+		// Cards are not dragged on mobile, so the zone is never shown there and the setting is hidden.
+		if (!Platform.isMobile) new Setting(containerEl)
 			.setName(t("settings.removeZone", { remove: t("board.removeTitle") }))
 			.setDesc(t("settings.removeZoneDesc", { remove: ARCHIVE_SECTION }))
 			.addDropdown((dropdown) => {
