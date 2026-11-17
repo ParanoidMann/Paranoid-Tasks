@@ -27,6 +27,7 @@ import {
 	TaskList,
 	toFileName,
 	toISODate,
+	unknownPriorities,
 	validateColumnName,
 	validatePriorityName,
 } from "./tasks";
@@ -35,6 +36,8 @@ import { ensureTaskFile, readTasks, setTaskLocation, taskFilePath, taskFolder, u
 export default class ParanoidTasksPlugin extends Plugin {
 	settings: ParanoidTasksSettings = { ...DEFAULT_SETTINGS };
 	private ribbonEl: HTMLElement | null = null;
+	/** Set while a priority rename/delete is rewriting the task file, see importPriorities. */
+	private prioritiesBusy = false;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -56,14 +59,21 @@ export default class ParanoidTasksPlugin extends Plugin {
 		// Automatic updates (deadline escalation, redrawing recurring tasks whose period has passed): on start,
 		// every minute (hourly and "daily HH:MM" rollovers need minute precision) and shortly after the task file changes.
 		// It only writes when something changes, so reacting to its own writes does not loop.
-		const checkSoon = debounce(() => void this.runMaintenance(), 1000, true);
+		// Priorities live in this device's settings, so ones added on another device are picked up from the task file.
+		const checkSoon = debounce(() => {
+			void this.importPriorities();
+			void this.runMaintenance();
+		}, 1000, true);
 		this.registerEvent(
 			this.app.vault.on("modify", (file) => {
 				if (file.path === taskFilePath()) checkSoon();
 			}),
 		);
 		this.registerInterval(window.setInterval(() => void this.runMaintenance(), 60 * 1000));
-		this.app.workspace.onLayoutReady(() => void this.runMaintenance());
+		this.app.workspace.onLayoutReady(() => {
+			void this.importPriorities();
+			void this.runMaintenance();
+		});
 	}
 
 	/**
@@ -89,6 +99,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 			throw e;
 		}
 		await this.updateSettings({ taskFolder: folder, taskFile: file, columns });
+		await this.importPriorities();
 	}
 
 	/**
@@ -162,6 +173,28 @@ export default class ParanoidTasksPlugin extends Plugin {
 			const list = await readTasks(this.app);
 			if (serialize(update(list)) === serialize(list)) return;
 			await updateTasks(this.app, this.columnNames(), update);
+		} catch (e) {
+			new Notice(t("notice.error", { message: (e as Error).message }));
+		}
+	}
+
+	/**
+	 * Adds priorities that tasks in the file are tagged with but this device does not
+	 * know (e.g. created on another device; settings are not synced with the file).
+	 * They get the default symbol and color, which can be changed in settings.
+	 */
+	async importPriorities(): Promise<void> {
+		// A rename/delete rewrites the tags before saving settings; the file is briefly ahead of them.
+		if (this.prioritiesBusy) return;
+		if (!(this.app.vault.getAbstractFileByPath(taskFilePath()) instanceof TFile)) return;
+		try {
+			const list = await readTasks(this.app);
+			// Checked against the settings as they are after the read: another call may have added some meanwhile.
+			const priorities = this.settings.priorities;
+			const names = unknownPriorities(list, priorities.map((p) => p.name));
+			if (names.length === 0 || this.prioritiesBusy) return;
+			await this.savePriorities([...priorities, ...names.map(newPriority)]);
+			new Notice(t("notice.prioritiesImported", { names: names.join(", ") }));
 		} catch (e) {
 			new Notice(t("notice.error", { message: (e as Error).message }));
 		}
@@ -275,7 +308,7 @@ export default class ParanoidTasksPlugin extends Plugin {
 		const name = sanitize(rawName);
 		const priorities = this.settings.priorities;
 		assertValid(validatePriorityName(name, priorities.map((p) => p.name), -1));
-		await this.savePriorities([...priorities, { name, symbol: "●", color: "#888888" }]);
+		await this.savePriorities([...priorities, newPriority(name)]);
 	}
 
 	/** Renames a priority; tags in Main.md are rewritten unless it is the default (untagged) one. */
@@ -285,9 +318,14 @@ export default class ParanoidTasksPlugin extends Plugin {
 		const oldName = priorities[index].name;
 		if (name === oldName) return;
 		assertValid(validatePriorityName(name, priorities.map((p) => p.name), index));
-		if (index > 0) await updateTasks(this.app, this.columnNames(), (l) => renamePriorityTags(l, oldName, name));
-		if (this.settings.deadlinePriority === oldName) this.settings.deadlinePriority = name;
-		await this.savePriorities(priorities.map((p, i) => (i === index ? { ...p, name } : p)));
+		this.prioritiesBusy = true;
+		try {
+			if (index > 0) await updateTasks(this.app, this.columnNames(), (l) => renamePriorityTags(l, oldName, name));
+			if (this.settings.deadlinePriority === oldName) this.settings.deadlinePriority = name;
+			await this.savePriorities(priorities.map((p, i) => (i === index ? { ...p, name } : p)));
+		} finally {
+			this.prioritiesBusy = false;
+		}
 	}
 
 	/** Deletes a priority; its tasks lose the tag and become default priority. */
@@ -295,8 +333,13 @@ export default class ParanoidTasksPlugin extends Plugin {
 		if (index === 0) return;
 		const priorities = this.settings.priorities;
 		const name = priorities[index].name;
-		await updateTasks(this.app, this.columnNames(), (l) => clearPriority(l, name));
-		await this.savePriorities(priorities.filter((_, i) => i !== index));
+		this.prioritiesBusy = true;
+		try {
+			await updateTasks(this.app, this.columnNames(), (l) => clearPriority(l, name));
+			await this.savePriorities(priorities.filter((_, i) => i !== index));
+		} finally {
+			this.prioritiesBusy = false;
+		}
 	}
 
 	/** Reorders priorities; the default one always stays first. */
@@ -424,6 +467,11 @@ function loadLanguage(value: unknown): LanguagePreference {
 function validDeadlinePriority(name: string, priorities: Priority[]): string {
 	const candidates = priorities.slice(1);
 	return candidates.find((p) => p.name === name)?.name ?? candidates[0]?.name ?? "";
+}
+
+/** A new priority with the default symbol and color. */
+function newPriority(name: string): Priority {
+	return { name, symbol: "●", color: "#888888" };
 }
 
 function assertValid(error: string | null): void {

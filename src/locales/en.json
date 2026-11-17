@@ -8,6 +8,7 @@
 	"common.moveDown": "Move down",
 
 	"notice.error": "Paranoid Tasks: {message}",
+	"notice.prioritiesImported": "Paranoid Tasks: added priorities found in the task file: {names}",
 	"command.openBoard": "Open task board",
 
 	"board.defaultName": "Task board",

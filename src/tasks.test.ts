@@ -23,6 +23,7 @@ import {
 	renameDetails,
 	renamePriority,
 	renameSection,
+	unknownPriorities,
 	sanitize,
 	serialize,
 	TaskList,
@@ -469,5 +470,23 @@ describe("insertTaskAfter", () => {
 
 	it("appends when the anchor is gone", () => {
 		expect(getItems(insertTaskAfter(list, "Open", 0, "missing", "x"), "Open")).toEqual(["a", "b", "c", "x"]);
+	});
+});
+
+describe("unknownPriorities", () => {
+	it("lists tag names missing from the known priorities, once each, in order", () => {
+		const list = parse(
+			[
+				"## Open",
+				"- [Priority: High] a",
+				"- [Priority: minor] b",
+				"- plain",
+				"- [Priority: MINOR] c",
+				"## Archive",
+				"- [Priority: Someday] d",
+			].join("\n"),
+		);
+		expect(unknownPriorities(list, ["Normal", "high"])).toEqual(["minor", "Someday"]);
+		expect(unknownPriorities(list, ["Normal", "High", "Minor", "someday"])).toEqual([]);
 	});
 });

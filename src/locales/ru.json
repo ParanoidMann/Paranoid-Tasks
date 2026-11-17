@@ -8,6 +8,7 @@
 	"common.moveDown": "Ниже",
 
 	"notice.error": "Paranoid Tasks: {message}",
+	"notice.prioritiesImported": "Paranoid Tasks: добавлены приоритеты из файла задач: {names}",
 	"command.openBoard": "Открыть доску задач",
 
 	"board.defaultName": "Доска задач",

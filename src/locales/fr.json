@@ -8,6 +8,7 @@
 	"common.moveDown": "Descendre",
 
 	"notice.error": "Paranoid Tasks : {message}",
+	"notice.prioritiesImported": "Paranoid Tasks : priorités ajoutées depuis le fichier des tâches : {names}",
 	"command.openBoard": "Ouvrir le tableau des tâches",
 
 	"board.defaultName": "Tableau des tâches",

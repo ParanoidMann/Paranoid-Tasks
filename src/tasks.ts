@@ -398,6 +398,24 @@ export function renameDetails(list: TaskList, oldNames: string[], newName: strin
 }
 
 /**
+ * Priority names used in task tags but missing from `known`, in order of first
+ * appearance, each once (case-insensitive). Invalid names are skipped.
+ */
+export function unknownPriorities(list: TaskList, known: string[]): string[] {
+	const found: string[] = [];
+	for (const section of list.sections) {
+		for (const raw of section.items) {
+			const name = parseTask(raw).priority;
+			if (name === null) continue;
+			const clean = sanitize(name);
+			if (known.some((k) => sameTitle(k, clean))) continue;
+			if (validatePriorityName(clean, found, -1) === null) found.push(clean);
+		}
+	}
+	return found;
+}
+
+/**
  * Whether a recurring task counts as checked at `now`: it has a Done tag set
  * within the current period of its rule. An older Done tag stays in the file
  * but no longer counts, so the period rollover is never written to the file —
