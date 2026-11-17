@@ -21,6 +21,7 @@
 	"board.dropToRemove": "Hierher ziehen, um zu archivieren",
 	"board.showRemoved": "Archivierte Aufgaben anzeigen",
 	"board.hideRemoved": "Archivierte Aufgaben ausblenden",
+	"board.openFile": "Aufgabendatei als Text öffnen",
 	"board.clear": "Leeren",
 	"board.clearTitle": "Archiv leeren?",
 	"board.clearMessage": "Alle archivierten Aufgaben ({count}) werden aus der Aufgabendatei gelöscht.",

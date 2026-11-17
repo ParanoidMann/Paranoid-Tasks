@@ -1,4 +1,4 @@
-import { ItemView, Menu, Notice, Platform, setIcon, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, MarkdownView, Menu, Notice, Platform, setIcon, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
 import { formatDate, t, TranslationKey } from "./i18n";
 import type ParanoidTasksPlugin from "./main";
 import type { ColumnConfig, Priority } from "./settings";
@@ -108,6 +108,7 @@ export class BoardView extends ItemView {
 			this.showRemoved = !this.showRemoved;
 			void this.refresh();
 		});
+		this.addAction("file-text", t("board.openFile"), () => void this.openTaskFile());
 		// Main.md content changes redraw the board; any note appearing, disappearing or
 		// being renamed may change whether a details link resolves.
 		const onMainChange = (file: TAbstractFile) => {
@@ -147,6 +148,22 @@ export class BoardView extends ItemView {
 			new Notice(t("notice.error", { message: (e as Error).message }));
 		}
 		await this.refresh();
+	}
+
+	/** Opens the task file as a note: switches to its tab if it is already open, otherwise opens a new one. */
+	private async openTaskFile(): Promise<void> {
+		try {
+			const file = await ensureTaskFile(this.app, this.plugin.columnNames());
+			const { workspace } = this.app;
+			const existing = workspace.getLeavesOfType("markdown").find((leaf) => leaf.view instanceof MarkdownView && leaf.view.file === file);
+			if (existing) {
+				await workspace.revealLeaf(existing);
+				return;
+			}
+			await workspace.getLeaf("tab").openFile(file);
+		} catch (e) {
+			new Notice(t("notice.error", { message: (e as Error).message }));
+		}
 	}
 
 	async onClose(): Promise<void> {

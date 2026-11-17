@@ -21,6 +21,7 @@
 	"board.dropToRemove": "Déposez ici pour archiver",
 	"board.showRemoved": "Afficher les tâches archivées",
 	"board.hideRemoved": "Masquer les tâches archivées",
+	"board.openFile": "Ouvrir le fichier des tâches en texte",
 	"board.clear": "Vider",
 	"board.clearTitle": "Vider les archives ?",
 	"board.clearMessage": "Les {count} tâches archivées seront supprimées du fichier de tâches.",

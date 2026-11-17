@@ -21,6 +21,7 @@
 	"board.dropToRemove": "Drop here to archive",
 	"board.showRemoved": "Show archived tasks",
 	"board.hideRemoved": "Hide archived tasks",
+	"board.openFile": "Open task file as text",
 	"board.clear": "Clear",
 	"board.clearTitle": "Clear Archive?",
 	"board.clearMessage": "All {count} archived tasks will be deleted from the task file.",

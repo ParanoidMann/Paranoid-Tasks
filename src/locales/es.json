@@ -21,6 +21,7 @@
 	"board.dropToRemove": "Suelta aquí para archivar",
 	"board.showRemoved": "Mostrar tareas archivadas",
 	"board.hideRemoved": "Ocultar tareas archivadas",
+	"board.openFile": "Abrir el archivo de tareas como texto",
 	"board.clear": "Vaciar",
 	"board.clearTitle": "¿Vaciar el archivo?",
 	"board.clearMessage": "Las {count} tareas archivadas se eliminarán del archivo de tareas.",

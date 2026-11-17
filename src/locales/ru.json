@@ -21,6 +21,7 @@
 	"board.dropToRemove": "Перетащите сюда, чтобы отправить в архив",
 	"board.showRemoved": "Показать задачи в архиве",
 	"board.hideRemoved": "Скрыть задачи в архиве",
+	"board.openFile": "Открыть текстовый файл задач",
 	"board.clear": "Очистить",
 	"board.clearTitle": "Очистить архив?",
 	"board.clearMessage": "Все задачи в архиве ({count}) будут удалены из файла задач.",
