@@ -5,8 +5,12 @@ import {
 	Notice,
 	Platform,
 	PluginSettingTab,
+	requireApiVersion,
 	setIcon,
 	Setting,
+	SettingDefinition,
+	SettingDefinitionGroup,
+	SettingDefinitionItem,
 	TFolder,
 	ToggleComponent,
 } from "obsidian";
@@ -187,13 +191,46 @@ class IconSuggest extends AbstractInputSuggest<string> {
 	}
 }
 
+/** One settings row: what search sees (name, description) and how the controls are built. */
+interface SettingRow {
+	name: string;
+	desc?: string;
+	/** Rows without their own name (column and priority lists) are left out of the search. */
+	searchable?: boolean;
+	visible?: boolean;
+	render?: (setting: Setting) => void;
+}
+
+/** Rows under a heading; the description is shown as a row of its own under the heading. */
+interface SettingSection {
+	heading?: string;
+	desc?: string;
+	rows: SettingRow[];
+}
+
 export class ParanoidTasksSettingTab extends PluginSettingTab {
+	/** Tab shown by the hand-drawn settings of Obsidian before 1.13 (see display). */
 	private activeTab: SettingsTab = "general";
 
 	constructor(app: App, private plugin: ParanoidTasksPlugin) {
 		super(app, plugin);
 	}
 
+	/**
+	 * Settings for Obsidian 1.13+, which draws them and indexes them for its settings search:
+	 * General inline, Columns and Cards as pages. Built from the current settings on each update.
+	 */
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		const items: SettingDefinitionItem[] = this.sections("general").map(toGroup);
+		for (const tab of TABS) {
+			if (tab.id === "general") continue;
+			items.push({ type: "page", name: t(tab.label), items: this.sections(tab.id).map(toGroup) });
+		}
+		items.push(toDefinition(this.versionRow()));
+		return items;
+	}
+
+	/** Obsidian before 1.13: the same rows, with tabs drawn by hand. Not called by newer versions. */
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
@@ -209,395 +246,414 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 		}
 
 		const body = containerEl.createDiv();
-		switch (this.activeTab) {
-			case "general":
-				this.displayGeneral(body);
-				break;
-			case "columns":
-				this.displayColumns(body);
-				break;
-			case "cards":
-				this.displayPriorities(body);
-				this.displayDeadline(body);
-				this.displayRepeat(body);
-				this.displayDetails(body);
-				break;
+		for (const section of this.sections(this.activeTab)) {
+			if (section.heading) {
+				const heading = new Setting(body).setName(section.heading).setHeading();
+				if (section.desc) heading.setDesc(section.desc);
+			}
+			for (const row of section.rows) {
+				if (row.visible === false) continue;
+				const setting = new Setting(body).setName(row.name);
+				if (row.desc) setting.setDesc(row.desc);
+				row.render?.(setting);
+			}
 		}
 
-		containerEl.createDiv({
-			cls: "paranoid-settings-version",
-			text: t("settings.version", { name: this.plugin.manifest.name, version: this.plugin.manifest.version }),
-		});
+		containerEl.createDiv({ cls: "paranoid-settings-version", text: this.versionRow().desc });
 	}
 
-	private displayGeneral(containerEl: HTMLElement): void {
-		const { boardName, boardIcon, language } = this.plugin.settings;
-
-		new Setting(containerEl)
-			.setName(t("settings.language"))
-			.setDesc(t("settings.languageDesc"))
-			.addDropdown((dropdown) => {
-				dropdown.addOption("auto", t("settings.languageAuto"));
-				for (const lang of LANGUAGES) dropdown.addOption(lang, t(`language.${lang}`));
-				dropdown
-					.setValue(language)
-					.onChange(
-						(value) => void this.run(() => this.plugin.setLanguagePreference(value as LanguagePreference)),
-					);
-			});
-
-		new Setting(containerEl).setName(t("settings.board")).setHeading();
-
-		new Setting(containerEl)
-			.setName(t("settings.boardName"))
-			.setDesc(t("settings.boardNameDesc"))
-			.addText((text) => {
-				text.setPlaceholder(t("board.defaultName")).setValue(boardName);
-				text.inputEl.addEventListener("change", () => {
-					void this.run(() => this.plugin.changeBoardAppearance({ boardName: text.getValue() }));
-				});
-			});
-
-		const iconSetting = new Setting(containerEl)
-			.setName(t("settings.boardIcon"))
-			.setDesc(t("settings.boardIconDesc"));
-		const preview = iconSetting.controlEl.createDiv({ cls: "paranoid-icon-preview" });
-		setIcon(preview, boardIcon);
-		iconSetting.addText((text) => {
-			text.setPlaceholder(DEFAULT_SETTINGS.boardIcon).setValue(boardIcon);
-			const apply = (id: string) => void this.run(() => this.plugin.changeBoardAppearance({ boardIcon: id }));
-			new IconSuggest(this.app, text.inputEl, apply);
-			text.inputEl.addEventListener("change", () => apply(text.getValue()));
-		});
-
-		new Setting(containerEl)
-			.setName(t("settings.storage"))
-			.setDesc(t("settings.storageDesc"))
-			.setHeading();
-
-		const { taskFolder, taskFile } = this.plugin.settings;
-		new Setting(containerEl)
-			.setName(t("settings.taskFolder"))
-			.setDesc(t("settings.taskFolderDesc"))
-			.addText((text) => {
-				text.setPlaceholder(DEFAULT_TASK_FOLDER).setValue(taskFolder);
-				const apply = (path: string) =>
-					void this.run(() => this.plugin.changeTaskLocation({ taskFolder: path }));
-				new FolderSuggest(this.app, text.inputEl, apply);
-				text.inputEl.addEventListener("change", () => apply(text.getValue()));
-			});
-
-		new Setting(containerEl)
-			.setName(t("settings.taskFile"))
-			.setDesc(t("settings.taskFileDesc"))
-			.addText((text) => {
-				text.setPlaceholder(DEFAULT_TASK_FILE).setValue(taskFile);
-				text.inputEl.addEventListener("change", () => {
-					void this.run(() => this.plugin.changeTaskLocation({ taskFile: text.getValue() }));
-				});
-			});
+	/** Redraws the settings after a change, with whichever API this Obsidian version uses. */
+	private rerender(): void {
+		if (requireApiVersion("1.13.0")) this.update();
+		else this.display();
 	}
 
-	private displayDeadline(containerEl: HTMLElement): void {
+	private sections(tab: SettingsTab): SettingSection[] {
+		switch (tab) {
+			case "general":
+				return this.generalSections();
+			case "columns":
+				return [this.columnsSection()];
+			case "cards":
+				return [this.prioritiesSection(), this.deadlineSection(), this.repeatSection(), this.detailsSection()];
+		}
+	}
+
+	private versionRow(): SettingRow {
+		return {
+			name: "",
+			desc: t("settings.version", { name: this.plugin.manifest.name, version: this.plugin.manifest.version }),
+			searchable: false,
+		};
+	}
+
+	private generalSections(): SettingSection[] {
+		const { boardName, boardIcon, language, taskFolder, taskFile } = this.plugin.settings;
+		return [
+			{
+				rows: [
+					{
+						name: t("settings.language"),
+						desc: t("settings.languageDesc"),
+						render: (setting) =>
+							setting.addDropdown((dropdown) => {
+								dropdown.addOption("auto", t("settings.languageAuto"));
+								for (const lang of LANGUAGES) dropdown.addOption(lang, t(`language.${lang}`));
+								dropdown
+									.setValue(language)
+									.onChange(
+										(value) => void this.run(() => this.plugin.setLanguagePreference(value as LanguagePreference)),
+									);
+							}),
+					},
+				],
+			},
+			{
+				heading: t("settings.board"),
+				rows: [
+					{
+						name: t("settings.boardName"),
+						desc: t("settings.boardNameDesc"),
+						render: (setting) =>
+							setting.addText((text) => {
+								text.setPlaceholder(t("board.defaultName")).setValue(boardName);
+								text.inputEl.addEventListener("change", () => {
+									void this.run(() => this.plugin.changeBoardAppearance({ boardName: text.getValue() }));
+								});
+							}),
+					},
+					{
+						name: t("settings.boardIcon"),
+						desc: t("settings.boardIconDesc"),
+						render: (setting) => {
+							const preview = setting.controlEl.createDiv({ cls: "paranoid-icon-preview" });
+							setIcon(preview, boardIcon);
+							setting.addText((text) => {
+								text.setPlaceholder(DEFAULT_SETTINGS.boardIcon).setValue(boardIcon);
+								const apply = (id: string) => void this.run(() => this.plugin.changeBoardAppearance({ boardIcon: id }));
+								new IconSuggest(this.app, text.inputEl, apply);
+								text.inputEl.addEventListener("change", () => apply(text.getValue()));
+							});
+						},
+					},
+				],
+			},
+			{
+				heading: t("settings.storage"),
+				desc: t("settings.storageDesc"),
+				rows: [
+					{
+						name: t("settings.taskFolder"),
+						desc: t("settings.taskFolderDesc"),
+						render: (setting) =>
+							setting.addText((text) => {
+								text.setPlaceholder(DEFAULT_TASK_FOLDER).setValue(taskFolder);
+								const apply = (path: string) => void this.run(() => this.plugin.changeTaskLocation({ taskFolder: path }));
+								new FolderSuggest(this.app, text.inputEl, apply);
+								text.inputEl.addEventListener("change", () => apply(text.getValue()));
+							}),
+					},
+					{
+						name: t("settings.taskFile"),
+						desc: t("settings.taskFileDesc"),
+						render: (setting) =>
+							setting.addText((text) => {
+								text.setPlaceholder(DEFAULT_TASK_FILE).setValue(taskFile);
+								text.inputEl.addEventListener("change", () => {
+									void this.run(() => this.plugin.changeTaskLocation({ taskFile: text.getValue() }));
+								});
+							}),
+					},
+				],
+			},
+		];
+	}
+
+	private deadlineSection(): SettingSection {
 		const { deadlineShow, deadlineEscalate, deadlineDays, deadlinePriority, priorities } = this.plugin.settings;
 		const update = (patch: Parameters<ParanoidTasksPlugin["updateDeadlineSettings"]>[0], rerender = false) =>
 			void this.run(() => this.plugin.updateDeadlineSettings(patch), rerender);
-
-		new Setting(containerEl).setName(t("settings.deadline")).setHeading();
-		this.addDialogToggle(containerEl, "dialogDeadline");
-
-		new Setting(containerEl)
-			.setName(t("settings.deadlineShow"))
-			.setDesc(t("settings.deadlineShowDesc"))
-			.addToggle((toggle) => toggle.setValue(deadlineShow).onChange((value) => update({ deadlineShow: value })));
-
-		new Setting(containerEl)
-			.setName(t("settings.deadlineEscalate"))
-			.setDesc(t("settings.deadlineEscalateDesc"))
-			// Re-render to enable/disable the two settings below.
-			.addToggle((toggle) =>
-				toggle.setValue(deadlineEscalate).onChange((value) => update({ deadlineEscalate: value }, true)),
-			);
-
-		new Setting(containerEl)
-			.setName(t("settings.deadlineDays"))
-			.setDesc(t("settings.deadlineDaysDesc"))
-			.setDisabled(!deadlineEscalate)
-			.addText((text) => {
-				text.inputEl.type = "number";
-				text.inputEl.min = "0";
-				text.inputEl.max = "365";
-				text.inputEl.addClass("paranoid-number-input");
-				text.setValue(String(deadlineDays)).setDisabled(!deadlineEscalate);
-				text.inputEl.addEventListener("change", () => {
-					update({ deadlineDays: Number(text.getValue()) }, true);
-				});
-			});
-
 		const candidates = priorities.slice(1);
-		new Setting(containerEl)
-			.setName(t("settings.deadlinePriority"))
-			.setDesc(candidates.length > 0 ? t("settings.deadlinePriorityDesc") : t("settings.deadlinePriorityNone"))
-			.setDisabled(!deadlineEscalate || candidates.length === 0)
-			.addDropdown((dropdown) => {
-				for (const p of candidates) dropdown.addOption(p.name, p.name);
-				dropdown
-					.setValue(deadlinePriority)
-					.setDisabled(!deadlineEscalate || candidates.length === 0)
-					.onChange((value) => update({ deadlinePriority: value }));
-			});
+		const priorityDisabled = !deadlineEscalate || candidates.length === 0;
+
+		return {
+			heading: t("settings.deadline"),
+			rows: [
+				this.dialogToggleRow("dialogDeadline"),
+				{
+					name: t("settings.deadlineShow"),
+					desc: t("settings.deadlineShowDesc"),
+					render: (setting) =>
+						setting.addToggle((toggle) => toggle.setValue(deadlineShow).onChange((value) => update({ deadlineShow: value }))),
+				},
+				{
+					name: t("settings.deadlineEscalate"),
+					desc: t("settings.deadlineEscalateDesc"),
+					// Re-render to enable/disable the two settings below.
+					render: (setting) =>
+						setting.addToggle((toggle) =>
+							toggle.setValue(deadlineEscalate).onChange((value) => update({ deadlineEscalate: value }, true)),
+						),
+				},
+				{
+					name: t("settings.deadlineDays"),
+					desc: t("settings.deadlineDaysDesc"),
+					render: (setting) =>
+						setting.setDisabled(!deadlineEscalate).addText((text) => {
+							text.inputEl.type = "number";
+							text.inputEl.min = "0";
+							text.inputEl.max = "365";
+							text.inputEl.addClass("paranoid-number-input");
+							text.setValue(String(deadlineDays)).setDisabled(!deadlineEscalate);
+							text.inputEl.addEventListener("change", () => {
+								update({ deadlineDays: Number(text.getValue()) }, true);
+							});
+						}),
+				},
+				{
+					name: t("settings.deadlinePriority"),
+					desc: candidates.length > 0 ? t("settings.deadlinePriorityDesc") : t("settings.deadlinePriorityNone"),
+					render: (setting) =>
+						setting.setDisabled(priorityDisabled).addDropdown((dropdown) => {
+							for (const p of candidates) dropdown.addOption(p.name, p.name);
+							dropdown
+								.setValue(deadlinePriority)
+								.setDisabled(priorityDisabled)
+								.onChange((value) => update({ deadlinePriority: value }));
+						}),
+				},
+			],
+		};
 	}
 
-	private displayRepeat(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName(t("settings.repeat")).setDesc(t("settings.repeatDesc")).setHeading();
-		this.addDialogToggle(containerEl, "dialogRepeat");
-
-		new Setting(containerEl)
-			.setName(t("settings.repeatShow"))
-			.setDesc(t("settings.repeatShowDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.repeatShow)
-					.onChange((value) => void this.run(() => this.plugin.updateSettings({ repeatShow: value }), false)),
-			);
+	private repeatSection(): SettingSection {
+		return {
+			heading: t("settings.repeat"),
+			desc: t("settings.repeatDesc"),
+			rows: [
+				this.dialogToggleRow("dialogRepeat"),
+				this.toggleRow("repeatShow", t("settings.repeatShow"), t("settings.repeatShowDesc")),
+			],
+		};
 	}
 
-	private displayDetails(containerEl: HTMLElement): void {
-		new Setting(containerEl)
-			.setName(t("settings.details"))
-			.setDesc(t("settings.detailsDesc"))
-			.setHeading();
-		this.addDialogToggle(containerEl, "dialogDetails");
-
-		new Setting(containerEl)
-			.setName(t("settings.detailsFromText"))
-			.setDesc(t("settings.detailsFromTextDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.detailsFromText)
-					.onChange(
-						(value) => void this.run(() => this.plugin.updateSettings({ detailsFromText: value }), false),
-					),
-			);
-
-		new Setting(containerEl)
-			.setName(t("settings.detailsByDefault"))
-			.setDesc(t("settings.detailsByDefaultDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.detailsByDefault)
-					.onChange(
-						(value) => void this.run(() => this.plugin.updateSettings({ detailsByDefault: value }), false),
-					),
-			);
-
-		new Setting(containerEl)
-			.setName(t("settings.keepDetailsOnDelete"))
-			.setDesc(t("settings.keepDetailsOnDeleteDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.keepDetailsOnDelete)
-					.onChange(
-						(value) => void this.run(() => this.plugin.updateSettings({ keepDetailsOnDelete: value }), false),
-					),
-			);
-
-		new Setting(containerEl)
-			.setName(t("settings.showDetailsIcon"))
-			.setDesc(t("settings.showDetailsIconDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.showDetailsIcon)
-					.onChange(
-						(value) => void this.run(() => this.plugin.updateSettings({ showDetailsIcon: value }), false),
-					),
-			);
+	private detailsSection(): SettingSection {
+		return {
+			heading: t("settings.details"),
+			desc: t("settings.detailsDesc"),
+			rows: [
+				this.dialogToggleRow("dialogDetails"),
+				this.toggleRow("detailsFromText", t("settings.detailsFromText"), t("settings.detailsFromTextDesc")),
+				this.toggleRow("detailsByDefault", t("settings.detailsByDefault"), t("settings.detailsByDefaultDesc")),
+				this.toggleRow("keepDetailsOnDelete", t("settings.keepDetailsOnDelete"), t("settings.keepDetailsOnDeleteDesc")),
+				this.toggleRow("showDetailsIcon", t("settings.showDetailsIcon"), t("settings.showDetailsIconDesc")),
+			],
+		};
 	}
 
-	private displayColumns(containerEl: HTMLElement): void {
+	private columnsSection(): SettingSection {
 		const columns = this.plugin.settings.columns;
-
-		new Setting(containerEl)
-			.setName(t("settings.columns"))
-			.setDesc(t("settings.columnsDesc", { remove: ARCHIVE_SECTION }))
-			.setHeading();
-
-		new Setting(containerEl)
-			.setName(t("settings.columnDrag"))
-			.setDesc(t("settings.columnDragDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.columnDrag)
-					.onChange((value) => void this.run(() => this.plugin.setColumnDrag(value), false)),
-			);
-
-		new Setting(containerEl)
-			.setName(t("settings.reverseColumns"))
-			.setDesc(t("settings.reverseColumnsDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.reverseColumns)
-					.onChange(
-						(value) => void this.run(() => this.plugin.updateSettings({ reverseColumns: value }), false),
+		const rows: SettingRow[] = [
+			{
+				name: t("settings.columnDrag"),
+				desc: t("settings.columnDragDesc"),
+				render: (setting) =>
+					setting.addToggle((toggle) =>
+						toggle
+							.setValue(this.plugin.settings.columnDrag)
+							.onChange((value) => void this.run(() => this.plugin.setColumnDrag(value), false)),
 					),
-			);
-
-		// Cards are not dragged on mobile, so the zone is never shown there and the setting is hidden.
-		if (!Platform.isMobile) new Setting(containerEl)
-			.setName(t("settings.removeZone", { remove: t("board.removeTitle") }))
-			.setDesc(t("settings.removeZoneDesc", { remove: ARCHIVE_SECTION }))
-			.addDropdown((dropdown) => {
-				for (const mode of REMOVE_ZONE_MODES) dropdown.addOption(mode, t(`settings.removeZone.${mode}`));
-				dropdown
-					.setValue(this.plugin.settings.removeZone)
-					.onChange(
-						(value) =>
-							void this.run(() => this.plugin.updateSettings({ removeZone: value as RemoveZoneMode }), false),
-					);
-			});
+			},
+			this.toggleRow("reverseColumns", t("settings.reverseColumns"), t("settings.reverseColumnsDesc")),
+			{
+				name: t("settings.removeZone", { remove: t("board.removeTitle") }),
+				desc: t("settings.removeZoneDesc", { remove: ARCHIVE_SECTION }),
+				// The zone is never shown on mobile (cards are archived from the long-press menu there).
+				visible: !Platform.isMobile,
+				render: (setting) =>
+					setting.addDropdown((dropdown) => {
+						for (const mode of REMOVE_ZONE_MODES) dropdown.addOption(mode, t(`settings.removeZone.${mode}`));
+						dropdown
+							.setValue(this.plugin.settings.removeZone)
+							.onChange(
+								(value) =>
+									void this.run(() => this.plugin.updateSettings({ removeZone: value as RemoveZoneMode }), false),
+							);
+					}),
+			},
+		];
 
 		columns.forEach((column, index) => {
-			const setting = new Setting(containerEl)
-				.addText((text) => {
-					text.setValue(column.name);
-					// "change" fires on blur/Enter, so the file is not rewritten on every keystroke.
-					text.inputEl.addEventListener("change", () => {
-						void this.run(() => this.plugin.renameColumn(index, text.getValue()));
-					});
-				})
-				.addExtraButton((b) =>
-					b
-						.setIcon("arrow-up")
-						.setTooltip(t("common.moveUp"))
-						.setDisabled(index === 0)
-						.onClick(() => void this.run(() => this.plugin.moveColumn(index, -1))),
-				)
-				.addExtraButton((b) =>
-					b
-						.setIcon("arrow-down")
-						.setTooltip(t("common.moveDown"))
-						.setDisabled(index === columns.length - 1)
-						.onClick(() => void this.run(() => this.plugin.moveColumn(index, 1))),
-				)
-				.addExtraButton((b) =>
-					b
-						.setIcon("trash-2")
-						.setTooltip(t("settings.deleteColumn"))
-						.onClick(() => void this.run(() => this.plugin.deleteColumn(index))),
-				);
-			setting.settingEl.addClass("paranoid-column-setting");
+			rows.push({
+				name: "",
+				searchable: false,
+				render: (setting) => {
+					setting
+						.addText((text) => {
+							text.setValue(column.name);
+							// "change" fires on blur/Enter, so the file is not rewritten on every keystroke.
+							text.inputEl.addEventListener("change", () => {
+								void this.run(() => this.plugin.renameColumn(index, text.getValue()));
+							});
+						})
+						.addExtraButton((b) =>
+							b
+								.setIcon("arrow-up")
+								.setTooltip(t("common.moveUp"))
+								.setDisabled(index === 0)
+								.onClick(() => void this.run(() => this.plugin.moveColumn(index, -1))),
+						)
+						.addExtraButton((b) =>
+							b
+								.setIcon("arrow-down")
+								.setTooltip(t("common.moveDown"))
+								.setDisabled(index === columns.length - 1)
+								.onClick(() => void this.run(() => this.plugin.moveColumn(index, 1))),
+						)
+						.addExtraButton((b) =>
+							b
+								.setIcon("trash-2")
+								.setTooltip(t("settings.deleteColumn"))
+								.onClick(() => void this.run(() => this.plugin.deleteColumn(index))),
+						);
+					setting.settingEl.addClass("paranoid-column-setting");
 
-			// Per-column options under the name: small labelled toggles.
-			const options = setting.infoEl.createDiv({ cls: "paranoid-column-options" });
-			const addOption = (label: string, tooltip: string, value: boolean, onChange: (v: boolean) => void) => {
-				const option = options.createEl("label", { cls: "paranoid-column-option", attr: { "aria-label": tooltip } });
-				new ToggleComponent(option).setValue(value).onChange(onChange);
-				option.createSpan({ text: label });
-			};
-			addOption(t("settings.collapsible"), t("settings.collapsibleTooltip"), column.collapsible, (collapsible) => {
-				void this.run(() => this.plugin.updateColumn(index, { collapsible }), false);
-			});
-			addOption(t("settings.taskCount"), t("settings.taskCountTooltip"), column.showCount, (showCount) => {
-				void this.run(() => this.plugin.updateColumn(index, { showCount }), false);
+					// Per-column options under the name: small labelled toggles.
+					const options = setting.infoEl.createDiv({ cls: "paranoid-column-options" });
+					const addOption = (label: string, tooltip: string, value: boolean, onChange: (v: boolean) => void) => {
+						const option = options.createEl("label", { cls: "paranoid-column-option", attr: { "aria-label": tooltip } });
+						new ToggleComponent(option).setValue(value).onChange(onChange);
+						option.createSpan({ text: label });
+					};
+					addOption(t("settings.collapsible"), t("settings.collapsibleTooltip"), column.collapsible, (collapsible) => {
+						void this.run(() => this.plugin.updateColumn(index, { collapsible }), false);
+					});
+					addOption(t("settings.taskCount"), t("settings.taskCountTooltip"), column.showCount, (showCount) => {
+						void this.run(() => this.plugin.updateColumn(index, { showCount }), false);
+					});
+				},
 			});
 		});
 
-		this.addNewItemRow(containerEl, t("settings.newColumn"), t("settings.columnNamePlaceholder"), (name) => this.plugin.addColumn(name));
+		rows.push(this.newItemRow(t("settings.newColumn"), t("settings.columnNamePlaceholder"), (name) => this.plugin.addColumn(name)));
+		return { heading: t("settings.columns"), desc: t("settings.columnsDesc", { remove: ARCHIVE_SECTION }), rows };
 	}
 
-	private displayPriorities(containerEl: HTMLElement): void {
+	private prioritiesSection(): SettingSection {
 		const priorities = this.plugin.settings.priorities;
-
-		new Setting(containerEl)
-			.setName(t("settings.priorities"))
-			.setDesc(t("settings.prioritiesDesc"))
-			.setHeading();
-		this.addDialogToggle(containerEl, "dialogPriority");
+		const rows: SettingRow[] = [this.dialogToggleRow("dialogPriority")];
 
 		priorities.forEach((priority, index) => {
 			const isDefault = index === 0;
-			const setting = new Setting(containerEl)
-				.setDesc(isDefault ? t("settings.defaultPriority") : "")
-				.addText((text) => {
-					text.setValue(priority.name).setPlaceholder(t("settings.priorityNamePlaceholder"));
-					text.inputEl.addEventListener("change", () => {
-						void this.run(() => this.plugin.renamePriority(index, text.getValue()));
-					});
-				})
-				.addText((text) => {
-					text.setValue(priority.symbol).setPlaceholder(t("settings.symbolPlaceholder"));
-					text.inputEl.addClass("paranoid-symbol-input");
-					text.inputEl.addEventListener("change", () => {
-						void this.run(() => this.plugin.updatePriority(index, { symbol: text.getValue() }), false);
-					});
-				})
-				.addColorPicker((picker) =>
-					picker
-						.setValue(priority.color)
-						.onChange((color) => void this.run(() => this.plugin.updatePriority(index, { color }), false)),
-				);
-			if (isDefault) return;
+			rows.push({
+				name: "",
+				desc: isDefault ? t("settings.defaultPriority") : undefined,
+				searchable: false,
+				render: (setting) => {
+					setting
+						.addText((text) => {
+							text.setValue(priority.name).setPlaceholder(t("settings.priorityNamePlaceholder"));
+							text.inputEl.addEventListener("change", () => {
+								void this.run(() => this.plugin.renamePriority(index, text.getValue()));
+							});
+						})
+						.addText((text) => {
+							text.setValue(priority.symbol).setPlaceholder(t("settings.symbolPlaceholder"));
+							text.inputEl.addClass("paranoid-symbol-input");
+							text.inputEl.addEventListener("change", () => {
+								void this.run(() => this.plugin.updatePriority(index, { symbol: text.getValue() }), false);
+							});
+						})
+						.addColorPicker((picker) =>
+							picker
+								.setValue(priority.color)
+								.onChange((color) => void this.run(() => this.plugin.updatePriority(index, { color }), false)),
+						);
+					if (isDefault) return;
 
-			setting
-				.addExtraButton((b) =>
-					b
-						.setIcon("arrow-up")
-						.setTooltip(t("common.moveUp"))
-						.setDisabled(index === 1)
-						.onClick(() => void this.run(() => this.plugin.movePriority(index, -1))),
-				)
-				.addExtraButton((b) =>
-					b
-						.setIcon("arrow-down")
-						.setTooltip(t("common.moveDown"))
-						.setDisabled(index === priorities.length - 1)
-						.onClick(() => void this.run(() => this.plugin.movePriority(index, 1))),
-				)
-				.addExtraButton((b) =>
-					b
-						.setIcon("trash-2")
-						.setTooltip(t("settings.deletePriority"))
-						.onClick(() => void this.run(() => this.plugin.deletePriority(index))),
-				);
+					setting
+						.addExtraButton((b) =>
+							b
+								.setIcon("arrow-up")
+								.setTooltip(t("common.moveUp"))
+								.setDisabled(index === 1)
+								.onClick(() => void this.run(() => this.plugin.movePriority(index, -1))),
+						)
+						.addExtraButton((b) =>
+							b
+								.setIcon("arrow-down")
+								.setTooltip(t("common.moveDown"))
+								.setDisabled(index === priorities.length - 1)
+								.onClick(() => void this.run(() => this.plugin.movePriority(index, 1))),
+						)
+						.addExtraButton((b) =>
+							b
+								.setIcon("trash-2")
+								.setTooltip(t("settings.deletePriority"))
+								.onClick(() => void this.run(() => this.plugin.deletePriority(index))),
+						);
+				},
+			});
 		});
 
-		this.addNewItemRow(containerEl, t("settings.newPriority"), t("settings.newPriorityPlaceholder"), (name) => this.plugin.addPriority(name));
+		rows.push(this.newItemRow(t("settings.newPriority"), t("settings.newPriorityPlaceholder"), (name) => this.plugin.addPriority(name)));
+		return { heading: t("settings.priorities"), desc: t("settings.prioritiesDesc"), rows };
+	}
+
+	/** A toggle bound to a boolean setting that does not need a redraw. */
+	private toggleRow(
+		key: "repeatShow" | "detailsFromText" | "detailsByDefault" | "keepDetailsOnDelete" | "showDetailsIcon" | "reverseColumns",
+		name: string,
+		desc: string,
+	): SettingRow {
+		return {
+			name,
+			desc,
+			render: (setting) =>
+				setting.addToggle((toggle) =>
+					toggle
+						.setValue(this.plugin.settings[key])
+						.onChange((value) => void this.run(() => this.plugin.updateSettings({ [key]: value }), false)),
+				),
+		};
 	}
 
 	/** "Show in task dialog" toggle for one of the optional dialog rows. */
-	private addDialogToggle(containerEl: HTMLElement, key: "dialogDetails" | "dialogPriority" | "dialogDeadline" | "dialogRepeat"): void {
-		new Setting(containerEl)
-			.setName(t("settings.showInDialog"))
-			.setDesc(t("settings.showInDialogDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings[key])
-					.onChange((value) => void this.run(() => this.plugin.updateSettings({ [key]: value }), false)),
-			);
+	private dialogToggleRow(key: "dialogDetails" | "dialogPriority" | "dialogDeadline" | "dialogRepeat"): SettingRow {
+		return {
+			name: t("settings.showInDialog"),
+			desc: t("settings.showInDialogDesc"),
+			render: (setting) =>
+				setting.addToggle((toggle) =>
+					toggle
+						.setValue(this.plugin.settings[key])
+						.onChange((value) => void this.run(() => this.plugin.updateSettings({ [key]: value }), false)),
+				),
+		};
 	}
 
 	/** Text field + Add button (Enter also adds). */
-	private addNewItemRow(
-		containerEl: HTMLElement,
-		label: string,
-		placeholder: string,
-		add: (name: string) => Promise<void>,
-	): void {
-		let newName = "";
-		new Setting(containerEl)
-			.setName(label)
-			.addText((text) => {
-				text.setPlaceholder(placeholder).onChange((v) => (newName = v));
-				text.inputEl.addEventListener("keydown", (e) => {
-					if (e.key === "Enter") void this.run(() => add(newName));
-				});
-			})
-			.addButton((b) =>
-				b
-					.setButtonText(t("common.add"))
-					.setCta()
-					.onClick(() => void this.run(() => add(newName))),
-			);
+	private newItemRow(label: string, placeholder: string, add: (name: string) => Promise<void>): SettingRow {
+		return {
+			name: label,
+			searchable: false,
+			render: (setting) => {
+				let newName = "";
+				setting
+					.addText((text) => {
+						text.setPlaceholder(placeholder).onChange((v) => (newName = v));
+						text.inputEl.addEventListener("keydown", (e) => {
+							if (e.key === "Enter") void this.run(() => add(newName));
+						});
+					})
+					.addButton((b) =>
+						b
+							.setButtonText(t("common.add"))
+							.setCta()
+							.onClick(() => void this.run(() => add(newName))),
+					);
+			},
+		};
 	}
 
 	/**
@@ -611,6 +667,21 @@ export class ParanoidTasksSettingTab extends PluginSettingTab {
 			new Notice((e as Error).message);
 			rerender = true;
 		}
-		if (rerender) this.display();
+		if (rerender) this.rerender();
 	}
+}
+
+/** A row for the declarative settings API: drawn by its render function, or a plain text row. */
+function toDefinition(row: SettingRow): SettingDefinition {
+	const base = { name: row.name, desc: row.desc, searchable: row.searchable, visible: row.visible };
+	const render = row.render;
+	return render ? { ...base, render: (setting: Setting) => render(setting) } : base;
+}
+
+/** A section as a declarative group; its description becomes a text row under the heading. */
+function toGroup(section: SettingSection): SettingDefinitionGroup {
+	const items: SettingDefinition[] = [];
+	if (section.desc) items.push(toDefinition({ name: "", desc: section.desc, searchable: false }));
+	items.push(...section.rows.map(toDefinition));
+	return { type: "group", heading: section.heading, items };
 }
